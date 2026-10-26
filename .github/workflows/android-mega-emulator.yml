@@ -99,7 +99,8 @@ jobs:
             echo "Android ARM native bridge: $(adb shell getprop ro.dalvik.vm.native.bridge)"
             adb shell svc wifi disable || true
             adb shell svc data disable || true
-            APK_UNDER_TEST=app/build/outputs/apk/sandboxDc/app-sandboxDc.apk bash ci/mega-mixed-media-apk-smoke.sh
+            # Run the fast install/JNI checks FIRST; if those fail, don't waste a million-word run.
             APK_UNDER_TEST=app/build/outputs/apk/debug/app-debug.apk bash ci/emulator-offline-smoke.sh
+            APK_UNDER_TEST=app/build/outputs/apk/sandboxDc/app-sandboxDc.apk bash ci/mega-mixed-media-apk-smoke.sh
       # Deliberately no network Telegram authentication, screenshots artifact,
       # user sessions, phone numbers, developer API keys or external uploads.
