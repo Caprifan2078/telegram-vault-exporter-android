@@ -1,6 +1,6 @@
 name: Public offline + test-DC QA APKs (no embedded Telegram credentials)
 
-# QA milestone: complete a real 1m-word, 48-MiB encrypted export with network/disk failure recovery.
+# QA milestone: recompile test network APK with API cancellation cleanup and no shared-test 2FA/email prompts.
 # Only adding this workflow on the experimental branch triggers native compilation.
 # Unrelated source pushes never automatically retrigger this expensive job.
 on:
