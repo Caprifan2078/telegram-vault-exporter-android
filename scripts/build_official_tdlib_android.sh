@@ -10,13 +10,17 @@ if [[ ! "$TDLIB_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
   echo 'ABORT: TDLIB_COMMIT must be a full lowercase 40-digit Git SHA' >&2
   exit 2
 fi
+# Network-heavy native compilation is opt-in ONLY on a public GitHub runner.
+# Neither a private repository nor an unrelated workflow may trigger it.
+if [[ -n "${GITHUB_ACTIONS:-}" ]] &&
+   [[ "${GITHUB_REPOSITORY_VISIBILITY:-}" != 'public' ||
+      "${VAULT_ALLOW_PUBLIC_CI_TDLIB_BUILD:-}" != '1' ]]; then
+  echo 'ABORT: Android native CI requires explicit opt-in on a public repository' >&2
+  exit 2
+fi
 for binary in docker git python3 readelf; do
   command -v "$binary" >/dev/null || { echo "ABORT: missing tool: $binary" >&2; exit 2; }
 done
-if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-  echo 'ABORT: costly Android TDLib build is disabled in GitHub Actions' >&2
-  exit 2
-fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/source" "$WORK/context" "$WORK/output" "$WORK/libs"
