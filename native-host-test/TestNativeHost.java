@@ -13,6 +13,7 @@ public final class TestNativeHost {
       "Malformed UTF-8 was not safely decoded: "+request+" result="+actual);
   }
   public static void main(String[] args) {
+    if (!TdNative.disableSensitiveLogging()) throw new AssertionError("TDLib logger not disabled");
     if (TdNative.createClient()!=17)throw new AssertionError("Incorrect client ID");
     verify("{\"@type\":\"getChat\",\"chat_id\":1234}");
     verify("{\"name\":\"Привет, мир\"}");
