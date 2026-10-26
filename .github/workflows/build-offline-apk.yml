@@ -1,5 +1,6 @@
 name: Public offline + test-DC QA APKs (no embedded Telegram credentials)
 
+# QA milestone: compile test-DC registration support with explicit consent and zero embedded secrets.
 # Only adding this workflow on the experimental branch triggers native compilation.
 # Unrelated source pushes never automatically retrigger this expensive job.
 on:
