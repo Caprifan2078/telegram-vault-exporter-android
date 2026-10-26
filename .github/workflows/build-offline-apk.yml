@@ -58,6 +58,7 @@ jobs:
       - name: Compile pinned official TDLib arm64
         env:
           VAULT_ALLOW_PUBLIC_CI_TDLIB_BUILD: '1'
+          VAULT_PUBLIC_REPOSITORY_CONFIRMED: ${{ github.event.repository.private == false }}
         run: bash scripts/build_official_tdlib_android.sh
       - name: Assemble credential-free offline demo APK
         run: |
