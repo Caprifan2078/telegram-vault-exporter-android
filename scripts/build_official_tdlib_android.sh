@@ -13,7 +13,8 @@ fi
 # Network-heavy native compilation is opt-in ONLY on a public GitHub runner.
 # Neither a private repository nor an unrelated workflow may trigger it.
 if [[ -n "${GITHUB_ACTIONS:-}" ]] &&
-   [[ "${GITHUB_REPOSITORY_VISIBILITY:-}" != 'public' ||
+   [[ "${VAULT_PUBLIC_REPOSITORY_CONFIRMED:-}" != 'true' ||
+      "${GITHUB_REPOSITORY:-}" != 'Caprifan2078/telegram-vault-exporter-android' ||
       "${VAULT_ALLOW_PUBLIC_CI_TDLIB_BUILD:-}" != '1' ]]; then
   echo 'ABORT: Android native CI requires explicit opt-in on a public repository' >&2
   exit 2
