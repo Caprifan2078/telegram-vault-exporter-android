@@ -59,6 +59,13 @@ public final class TdGateway {
     String method = request == null ? "" : request.optString("@type", "");
     if (!ALLOWED_REQUESTS.contains(method) || ("registerUser".equals(method) && !allowTestRegistration))
       throw new SecurityException("Unauthorized Telegram RPC blocked by read-only export policy");
+    // Fail-closed: this QA APK must NEVER submit the owner's real phone number,
+    // even to a test DC. Official shared test numbers are the only permitted ones.
+    if (allowTestRegistration && "setAuthenticationPhoneNumber".equals(method)) {
+      String phone=request.optString("phone_number","");
+      if (!phone.matches("\\+?99966[1-3][0-9]{4}"))
+        throw new SecurityException("Test DC accepts only official 99966XYYYY test numbers");
+    }
     String id = Long.toString(sequence.incrementAndGet());
     CompletableFuture<JSONObject> result = new CompletableFuture<>();
     pending.put(id, result);
