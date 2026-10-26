@@ -117,7 +117,14 @@ public final class TestHardenedExportEngine {
           .put("media",new JSONArray().put(new JSONObject().put("file",new JSONObject().put("id",4242)))));
       boolean stopped=false;
       try{send(typeRoot,unsupportedGateway,chat,new ByteArrayOutputStream());}
-      catch(IOException expected){stopped=expected.getMessage().contains(unsupported);}
+      catch(IOException expected){
+        // Paid media and chat-photo changes are now supported; malformed
+        // synthetic variants must still fail closed rather than be ignored.
+        String message=expected.getMessage();
+        stopped=message!=null && (message.contains("Медиа скрыто")
+          || message.contains("нет исходного файла")
+          || message.contains("Тип сообщения"));
+      }
       yes(stopped,"Unsupported content was silently ignored: "+unsupported);
       // A subsequent run of the same exporter with newly supported content is
       // allowed to resume the already committed pages and finish accurately.
@@ -125,6 +132,26 @@ public final class TestHardenedExportEngine {
       send(typeRoot,new TdGateway(shortIds,typeRoot),chat,afterUpdate);
       checkArchive(afterUpdate.toByteArray(),shortIds,8);
     }
+    // Valid paid-media and service-message photo variants are now supported.
+    File supportedRoot=Files.createTempDirectory("hardened-supported-media-").toFile();
+    TdGateway supported=new TdGateway(shortIds,supportedRoot);
+    supported.contentOverride(10,new JSONObject().put("@type","messagePaidMedia")
+      .put("media",new JSONArray().put(new JSONObject().put("@type","paidMediaPhoto")
+        .put("photo",new JSONObject().put("sizes",new JSONArray().put(
+          new JSONObject().put("width",500).put("height",500)
+            .put("photo",new JSONObject().put("id",502))))))));
+    ByteArrayOutputStream supportedArchive=new ByteArrayOutputStream();
+    send(supportedRoot,supported,chat,supportedArchive);
+    checkArchive(supportedArchive.toByteArray(),shortIds,9);
+    File chatPhotoRoot=Files.createTempDirectory("hardened-chat-photo-").toFile();
+    TdGateway photoGateway=new TdGateway(shortIds,chatPhotoRoot);
+    photoGateway.contentOverride(10,new JSONObject().put("@type","messageChatChangePhoto")
+      .put("photo",new JSONObject().put("sizes",new JSONArray().put(
+        new JSONObject().put("width",500).put("height",500)
+          .put("photo",new JSONObject().put("id",502))))));
+    ByteArrayOutputStream chatPhotoArchive=new ByteArrayOutputStream();
+    send(chatPhotoRoot,photoGateway,chat,chatPhotoArchive);
+    checkArchive(chatPhotoArchive.toByteArray(),shortIds,9);
     File previewRoot=Files.createTempDirectory("hardened-link-preview-").toFile();
     TdGateway preview=new TdGateway(shortIds,previewRoot);
     preview.contentOverride(1,new JSONObject().put("@type","messageText")
@@ -132,7 +159,7 @@ public final class TestHardenedExportEngine {
         .put("link_preview",new JSONObject().put("@type","linkPreviewPhoto")));
     boolean previewRejected=false;
     try{send(previewRoot,preview,chat,new ByteArrayOutputStream());}
-    catch(IOException expected){previewRejected=expected.getMessage().contains("messageText");}
+    catch(IOException expected){previewRejected=expected.getMessage().contains("Непроверенный предпросмотр");}
     yes(previewRejected,"Rich preview silently skipped");
     File ordinaryRoot=Files.createTempDirectory("hardened-non-media-").toFile();
     TdGateway ordinary=new TdGateway(shortIds,ordinaryRoot);
