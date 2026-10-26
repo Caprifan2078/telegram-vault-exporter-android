@@ -1,4 +1,4 @@
-name: One-shot public offline APK build (no Telegram credentials)
+name: Public offline APK build (no Telegram credentials)
 
 # Only adding this workflow on the experimental branch triggers native compilation.
 # Unrelated source pushes never automatically retrigger this expensive job.
@@ -55,11 +55,36 @@ jobs:
         run: |
           python3 tests/RUN_BUILD_SAFETY_TESTS.py
           python3 ci-contract/verify_ci_contract.py
+      # Cache ONLY the locally verified public-source native output from this
+      # dedicated branch so repeated Android/Gradle fixes don't waste >20 minutes.
+      - name: Restore verified TDLib binary cache
+        id: tdlib-binary-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libtdjson.so
+            build/tdlib-provenance/verified-build.json
+          key: vault-tdlib-arm64-ea3f69ce-openssl359-ndk263-v1-${{ hashFiles('scripts/build_official_tdlib_android.sh', 'scripts/prepare_tdlib_android.py') }}
       - name: Compile pinned official TDLib arm64
+        if: steps.tdlib-binary-cache.outputs.cache-hit != 'true'
         env:
           VAULT_ALLOW_PUBLIC_CI_TDLIB_BUILD: '1'
           VAULT_PUBLIC_REPOSITORY_CONFIRMED: ${{ github.event.repository.private == false }}
         run: bash scripts/build_official_tdlib_android.sh
+      - name: Reverify actual native binary before packaging
+        run: |
+          python3 scripts/verify_tdlib_elf.py app/src/main/jniLibs/arm64-v8a/libtdjson.so
+          test -s build/tdlib-provenance/verified-build.json
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          native=pathlib.Path('app/src/main/jniLibs/arm64-v8a/libtdjson.so').read_bytes()
+          provenance=json.loads(pathlib.Path('build/tdlib-provenance/verified-build.json').read_text())
+          actual=hashlib.sha256(native).hexdigest()
+          assert actual==provenance['sha256'], 'Cached TDLib does not match verified provenance'
+          assert provenance['commit']=='ea3f69ce11aef458bfbb09869b809ede4447486f'
+          assert provenance['openssl']=='openssl-3.5.9'
+          print('PASS: native source provenance and binary SHA-256')
+          PY
       - name: Assemble credential-free offline demo APK
         run: |
           gradle --no-daemon --stacktrace :app:assembleDebug -PtelegramEnvironment=test -PtelegramApiId=0 -PtelegramApiHash=
