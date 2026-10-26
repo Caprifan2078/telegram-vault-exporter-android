@@ -82,7 +82,7 @@ gradle=(ROOT/'app/build.gradle').read_text()
 manifest_main=(ROOT/'app/src/main/AndroidManifest.xml').read_text()
 manifest_debug=(ROOT/'app/src/debug/AndroidManifest.xml').read_text()
 manifest_sandbox=(ROOT/'app/src/sandboxDc/AndroidManifest.xml').read_text()
-# Regression: the network testDc refactor changed MainActivity's offline fence.
+# Regression: the network networkDc refactor changed MainActivity's offline fence.
 # An old Gradle string check silently broke credential-free offline builds.
 assert "offlineDemoOnly = telegramEnvironment == 'test'" in gradle
 assert "endsWith('assembledebug')" in gradle
@@ -96,16 +96,16 @@ assert 'Offline APK must contain NO Telegram API credentials' in gradle
 assert 'Missing developer Telegram API credentials' in gradle
 print('PASS: zero-secret offline APK build gate; network APK requires developer credentials')
 
-assert "testDc {" in gradle and "applicationIdSuffix '.networktest'" in gradle
+assert "networkDc {" in gradle and "applicationIdSuffix '.networktest'" in gradle
 assert "buildConfigField 'boolean', 'ALLOW_TEST_DC_NETWORK', 'false'" in gradle
 assert "buildConfigField 'boolean', 'ALLOW_TEST_DC_NETWORK', 'true'" in gradle
 assert "buildConfigField 'boolean', 'TELEGRAM_TEST_DC', 'true'" in gradle
 assert "buildConfigField 'boolean', 'ALLOW_PRODUCTION', 'false'" in gradle
-assert "sandboxDc/testDc APK must always use telegramEnvironment=test" in gradle
+assert "sandboxDc/networkDc APK must always use telegramEnvironment=test" in gradle
 assert 'uses-permission android:name="android.permission.INTERNET"' in manifest_main
 for manifest in (manifest_debug, manifest_sandbox):
     assert 'tools:node="remove"' in manifest
-assert not (ROOT/'app/src/testDc/AndroidManifest.xml').exists(), 'Test network manifest must inherit approved main INTERNET only'
+assert not (ROOT/'app/src/networkDc/AndroidManifest.xml').exists(), 'Test network manifest must inherit approved main INTERNET only'
 assert 'BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK' in activity
 assert 'BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK' in activity
 assert 'private void beginConnect()' in activity
