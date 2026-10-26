@@ -8,13 +8,14 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class TdGateway {
   // Read-only export API surface: auth and local cache cleanup are the only
   // intentional side-effecting exceptions. No message/chat mutations.
-  private static final Set<String> ALLOWED_REQUESTS = Set.of(
+  private static final Set<String> ALLOWED_REQUESTS = java.util.Collections.unmodifiableSet(
+      new java.util.HashSet<>(java.util.Arrays.asList(
     "getAuthorizationState", "setTdlibParameters", "setAuthenticationPhoneNumber",
     "setAuthenticationEmailAddress", "checkAuthenticationEmailCode",
     "checkAuthenticationCode", "checkAuthenticationPassword", "logOut",
     "getChats", "loadChats", "getChat", "getChatHistory", "getUser",
     "downloadFile", "cancelDownloadFile", "deleteFile", "getFile"
-  );
+      )));
   public interface Listener { void onUpdate(JSONObject event); }
   private final long client;
   private final ConcurrentHashMap<String, CompletableFuture<JSONObject>> pending = new ConcurrentHashMap<>();
