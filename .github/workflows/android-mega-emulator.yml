@@ -93,7 +93,8 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
-            set -euo pipefail
+            set -eu
+            # The runner launches this wrapper with /bin/sh; the real tests run via Bash.
             echo "Emulator ABI: $(adb shell getprop ro.product.cpu.abilist)"
             echo "Android ARM native bridge: $(adb shell getprop ro.dalvik.vm.native.bridge)"
             adb shell svc wifi disable || true
