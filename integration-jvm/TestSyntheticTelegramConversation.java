@@ -139,6 +139,9 @@ public final class TestSyntheticTelegramConversation {
     try{send(denied,locked,new ByteArrayOutputStream());}
     catch(SecurityException ex){refused=ex.getMessage().contains("запрещено");}
     check(refused,"Telegram content-saving restriction ignored");
+    // Optional developer artifact: synthetic only, test-password protected, never for production.
+    if(args.length>1)throw new IllegalArgumentException("At most one optional TVA output path");
+    if(args.length==1)Files.write(Path.of(args[0]),resumed.toByteArray());
     System.out.printf(Locale.ROOT,
       "PASS Synthetic TDLib conversation: %d messages, %d attachments including a two-file album, %d replies, %d forwards, %d edits, Unicode, participants, interruption/resume, plaintext purge, fail-closed restrictions; TVA=%d bytes%n",
       COUNT,MEDIA,replies,forwards,edits,resumed.size());
