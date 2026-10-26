@@ -14,18 +14,22 @@ public final class TdGateway {
     "setAuthenticationEmailAddress", "checkAuthenticationEmailCode",
     "checkAuthenticationCode", "checkAuthenticationPassword", "logOut",
     "getChats", "loadChats", "getChat", "getChatHistory", "getUser",
-    "downloadFile", "cancelDownloadFile", "deleteFile", "getFile"
+    "downloadFile", "cancelDownloadFile", "deleteFile", "getFile", "registerUser"
       )));
   public interface Listener { void onUpdate(JSONObject event); }
   private final long client;
   private final ConcurrentHashMap<String, CompletableFuture<JSONObject>> pending = new ConcurrentHashMap<>();
   private final AtomicLong sequence = new AtomicLong();
   private final Listener listener;
+  // Registration is deliberately unavailable in production and offline clients.
+  private final boolean allowTestRegistration;
   private final Thread reader;
   private volatile boolean running = true;
 
-  public TdGateway(Listener callback) {
+  public TdGateway(Listener callback) { this(callback, false); }
+  public TdGateway(Listener callback, boolean allowTestRegistration) {
     this.listener = callback;
+    this.allowTestRegistration = allowTestRegistration;
     if (!TdNative.disableSensitiveLogging())
       throw new IllegalStateException("Не удалось отключить журналы TDLib: сетевое подключение запрещено");
     client = TdNative.createClient();
@@ -53,7 +57,7 @@ public final class TdGateway {
     if(!running)throw new IllegalStateException("TDLib client is closed");
     // Never log private request data. Reject unknown/write commands before JNI.
     String method = request == null ? "" : request.optString("@type", "");
-    if (!ALLOWED_REQUESTS.contains(method))
+    if (!ALLOWED_REQUESTS.contains(method) || ("registerUser".equals(method) && !allowTestRegistration))
       throw new SecurityException("Unauthorized Telegram RPC blocked by read-only export policy");
     String id = Long.toString(sequence.incrementAndGet());
     CompletableFuture<JSONObject> result = new CompletableFuture<>();
