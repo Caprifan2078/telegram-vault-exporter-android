@@ -38,11 +38,19 @@ jobs:
         with:
           gradle-version: '8.7'
           cache-disabled: true
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Use preinstalled Android SDK (avoid obsolete SDK tools package)
+        run: |
+          test -n "${ANDROID_HOME:-}"
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' | sort -Vr | head -n1)"
+          fi
+          test -x "$SDKMANAGER"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          "$SDKMANAGER" --version
       - name: Install Android platform, NDK and CMake
         run: |
-          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;26.3.11579264'
+          "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;26.3.11579264'
       - name: Static source safeguards before compiling
         run: |
           python3 tests/RUN_BUILD_SAFETY_TESTS.py
