@@ -40,7 +40,7 @@ assert "orElse('test')" in build and 'approveProductionBuild' in build, 'Product
 assert "telegramEnvironment == 'production' && !productionApproved" in build, 'Production not fail-closed'
 assert 'verifyExporterBuild' in build and 'libtdjson.so' in build, 'Native build gate missing'
 assert 'tools:node="remove"' in debug_manifest and 'tools:node="remove"' in sandbox_manifest, 'Offline INTERNET exclusion missing'
-assert 'if(BuildConfig.TELEGRAM_TEST_DC){' in activity and 'private void showOfflineDemo()' in activity, 'Offline account fence missing'
+assert 'BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK' in activity and 'private void showOfflineDemo()' in activity, 'Offline account fence missing'
 assert 'AndroidManifest.xml' in read('scripts/security_gate.py'), 'Privacy static guard missing'
 for test in ('tests/RUN_TESTS_OFFLINE.sh', 'integration-jvm/RUN_INTEGRATION_JVM.sh',
              'transport-jvm/RUN_TRANSPORT_JVM.sh', 'native-host-test/RUN_NATIVE_HOST_TEST.sh'):
