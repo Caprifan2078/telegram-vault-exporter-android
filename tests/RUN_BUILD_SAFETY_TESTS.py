@@ -114,6 +114,20 @@ assert 'disable_notification",true' in activity
 
 assert 'testApiHash = null;' in activity
 assert 'testApiId = 0;' in activity
+# API identifiers belong to the connection attempt, not to the Activity's lifetime.
+assert 'private void clearPendingTestApiCredentials()' in activity
+assert 'if (td != null) {' in activity and 'Сеанс Telegram уже запущен' in activity
+assert 'setNegativeButton("Отмена",(dialog,which)->clearPendingTestApiCredentials())' in activity
+assert 'setOnCancelListener(dialog->clearPendingTestApiCredentials())' in activity
+assert 'id.getText().clear();' in activity and 'hash.getText().clear();' in activity
+assert 'clearPendingTestApiCredentials();\n    if(td!=null) td.stop();' in activity
+# A shared Test DC account may be occupied or require a stranger's email/2FA.
+# Never prompt for real-life 2FA passwords, email addresses or mailbox codes.
+for state in ("authorizationStateWaitPassword", "authorizationStateWaitEmailAddress", "authorizationStateWaitEmailCode"):
+    assert ('case "'+state+'":\n          if(BuildConfig.ALLOW_TEST_DC_NETWORK)') in activity, 'Unsafe shared test account credential prompt: '+state
+assert 'ОСТАНОВИСЬ: публичный тестовый номер запросил пароль 2FA' in activity
+assert 'ОСТАНОВИСЬ: для общедоступного тестового номера нужен email' in activity
+print('PASS: developer API credentials released on cancellation/destroy; shared Test DC cannot solicit real 2FA/email')
 assert 'BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiId : BuildConfig.TELEGRAM_API_ID' in activity
 assert 'BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiHash : BuildConfig.TELEGRAM_API_HASH' in activity
 assert 'new_verbosity_level' in (ROOT/'app/src/main/cpp/vaultbridge.cpp').read_text()
