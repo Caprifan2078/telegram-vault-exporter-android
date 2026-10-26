@@ -1,0 +1,2 @@
+-keep class org.vault.exporter.TdNative { *; }
+-keepclasseswithmembernames class * { native <methods>; }

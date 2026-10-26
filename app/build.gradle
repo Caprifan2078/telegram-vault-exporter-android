@@ -1,0 +1,93 @@
+plugins { id 'com.android.application' }
+
+// Safe default: API access is directed ONLY to Telegram test data centers.
+// A production-capable binary requires deliberate, separate build approval.
+def telegramEnvironment = providers.gradleProperty('telegramEnvironment').orElse('test').get()
+// Fail closed if someone attempts to assemble the test-data-center variant using
+// production configuration. This is NOT a production release channel.
+if (gradle.startParameter.taskNames.any { it.toLowerCase(java.util.Locale.ROOT).contains('sandboxdc') }
+        && telegramEnvironment != 'test')
+    throw new GradleException('sandboxDc APK must always use telegramEnvironment=test')
+def productionApproved = providers.gradleProperty('approveProductionBuild').orElse('false').get() == 'true'
+if (!(telegramEnvironment in ['test', 'production']))
+    throw new GradleException('telegramEnvironment must be test or production')
+if (telegramEnvironment == 'production' && !productionApproved)
+    throw new GradleException('Production Telegram connection is disabled: set approveProductionBuild=true after security review')
+
+
+def telegramId = providers.gradleProperty('telegramApiId').orElse('0').get()
+def telegramHash = providers.gradleProperty('telegramApiHash').orElse('').get()
+if (!(telegramId ==~ /\d+/)) throw new GradleException('telegramApiId must be a number')
+if (!(telegramHash ==~ /[a-fA-F0-9]{0,64}/)) throw new GradleException('Invalid telegramApiHash characters')
+
+android {
+    namespace 'org.vault.exporter'
+    compileSdk 35
+    defaultConfig {
+        // Different Android application IDs keep test/production credentials and
+        // TDLib databases isolated even on the same phone.
+        applicationId telegramEnvironment == 'test' ? 'org.vault.exporter.sandbox' : 'org.vault.exporter'
+        minSdk 26
+        targetSdk 35
+        versionCode 9
+        versionName '0.9-test-gated-alpha'
+        buildConfigField 'boolean', 'TELEGRAM_TEST_DC', telegramEnvironment == 'test' ? 'true' : 'false'
+        buildConfigField 'boolean', 'ALLOW_PRODUCTION', productionApproved ? 'true' : 'false'
+        buildConfigField 'int', 'TELEGRAM_API_ID', telegramId
+        buildConfigField 'String', 'TELEGRAM_API_HASH', '"' + telegramHash + '"'
+        ndk { abiFilters 'arm64-v8a' }
+    }
+    buildFeatures { buildConfig true }
+    externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug { minifyEnabled false }
+        // Developer-only network test build: a SEPARATE app, isolated from both
+        // production Telegram and the strictly offline screenshot/debug demo.
+        // Always targets Telegram TEST data centers, never production.
+        sandboxDc {
+            initWith release
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            applicationIdSuffix '.testnet'
+            versionNameSuffix '-testdc'
+            matchingFallbacks = ['release']
+            buildConfigField 'boolean', 'TELEGRAM_TEST_DC', 'true'
+            buildConfigField 'boolean', 'ALLOW_PRODUCTION', 'false'
+        }
+    }
+    packaging { jniLibs { useLegacyPackaging true } }
+}
+
+// A seemingly valid APK without official TDLib cannot export anything.
+// Reject such builds instead of distributing a misleading installation file.
+tasks.register('verifyExporterBuild') {
+    doLast {
+        File td = file('src/main/jniLibs/arm64-v8a/libtdjson.so')
+        if (!td.isFile() || td.length() < 512000L)
+            throw new GradleException('Missing official Android arm64-v8a TDLib binary: libtdjson.so')
+        if (telegramEnvironment == 'production' && !productionApproved)
+            throw new GradleException('Production mode requires explicit approval')
+        // The *single* isolated offline sandbox build requires no Telegram API key.
+        // The sandbox manifest removes INTERNET and the UI disables all login.
+        // This exception must never apply to production or other build tasks.
+        def tasksRequested = gradle.startParameter.taskNames
+        def offlineSandboxOnly = telegramEnvironment == 'test' &&
+            tasksRequested.size() == 1 &&
+            tasksRequested[0].toLowerCase(java.util.Locale.ROOT).endsWith('assemblesandboxdc') &&
+            file('src/sandboxDc/AndroidManifest.xml').text.contains('tools:node="remove"') &&
+            file('src/main/java/org/vault/exporter/MainActivity.java').text.contains(
+                'if(BuildConfig.TELEGRAM_TEST_DC){')
+        if (offlineSandboxOnly) {
+            if (telegramId != '0' || telegramHash != '')
+                throw new GradleException('Offline training APK must contain NO Telegram API credentials')
+        } else if (!(telegramId ==~ /[1-9][0-9]*/) || !(telegramHash ==~ /[a-fA-F0-9]{32}/)) {
+            throw new GradleException('Missing developer Telegram API credentials (telegramApiId/telegramApiHash)')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn(tasks.named('verifyExporterBuild')) }

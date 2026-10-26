@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(vaultbridge LANGUAGES CXX)
+add_library(vaultbridge SHARED vaultbridge.cpp)
+set_target_properties(vaultbridge PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES)
+target_link_libraries(vaultbridge dl log)
