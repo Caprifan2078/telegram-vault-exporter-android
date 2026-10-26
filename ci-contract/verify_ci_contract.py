@@ -25,6 +25,7 @@ assert 'persist-credentials: false' in manual, 'Checkout tokens must not persist
 assert 'timeout-minutes: 60' in manual and 'cancel-in-progress: true' in manual, 'Unbounded native build'
 assert 'contents: read' in manual and 'secrets.' not in manual and 'pull_request_target:' not in manual, 'Unexpected CI permissions or secrets'
 assert 'VAULT_ALLOW_PUBLIC_CI_TDLIB_BUILD:' in manual and 'scripts/build_official_tdlib_android.sh' in manual
+assert 'VAULT_PUBLIC_REPOSITORY_CONFIRMED: ${{ github.event.repository.private == false }}' in manual
 assert ':app:assembleDebug' in manual and '-PtelegramApiId=0' in manual and '-PtelegramApiHash=' in manual
 assert 'scripts/verify_offline_apk.py' in manual and 'retention-days: 1' in manual
 assert 'app/build/outputs/apk/debug/app-debug.apk' in manual and 'upload-artifact@v4' in manual
