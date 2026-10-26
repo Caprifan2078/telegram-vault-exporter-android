@@ -113,9 +113,15 @@ tasks.register('verifyExporterBuild') {
             offlineManifest.text.contains('tools:node="remove"') &&
             activitySource.contains('BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK') &&
             activitySource.contains('if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)')
-        if (offlineDemoOnly) {
+        def noEmbeddedKeysNetworkDc = telegramEnvironment == 'test' &&
+            tasksRequested.size() == 1 &&
+            tasksRequested[0].toLowerCase(java.util.Locale.ROOT).endsWith('assemblenetworkdc') &&
+            activitySource.contains('requestTestDcApiCredentials()') &&
+            activitySource.contains('BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiId : BuildConfig.TELEGRAM_API_ID') &&
+            activitySource.contains('BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiHash : BuildConfig.TELEGRAM_API_HASH')
+        if (offlineDemoOnly || noEmbeddedKeysNetworkDc) {
             if (telegramId != '0' || telegramHash != '')
-                throw new GradleException('Offline APK must contain NO Telegram API credentials')
+                throw new GradleException('QA APK must embed NO Telegram API credentials')
         } else if (!(telegramId ==~ /[1-9][0-9]*/) || !(telegramHash ==~ /[a-fA-F0-9]{32}/)) {
             throw new GradleException('Missing developer Telegram API credentials (telegramApiId/telegramApiHash)')
         }
