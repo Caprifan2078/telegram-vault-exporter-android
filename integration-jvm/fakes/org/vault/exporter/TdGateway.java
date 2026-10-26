@@ -7,7 +7,8 @@ import java.nio.charset.StandardCharsets;
 public final class TdGateway {
   final long[] ids;final File root;
   int calls,failHistoryAt,failFileId,failChatAt;
-  boolean inconsistentEmpty,protectedChat,secretChat,largeVideo;
+  boolean inconsistentEmpty,protectedChat,secretChat,largeVideo,randomLargeVideo;
+  int pageBatch=7,wordsPerMessage=0;
   int misroutedPosition=-1;
   boolean misroutedChatMetadata,misrouteStalledProbe;
   public void misrouteHistoryMessageAt(int position){misroutedPosition=position;}
@@ -24,6 +25,8 @@ public final class TdGateway {
   public void failChatCall(int n){failChatAt=n;}
   public int historyCalls(){return calls;}
   public void useLargeSyntheticVideo(){largeVideo=true;}
+  /** Force realistic full 100-message pages, >1m words and incompressible 48-MiB media. */
+  public void configureMega(int words){pageBatch=100;wordsPerMessage=words;randomLargeVideo=true;}
   public static JSONObject cmd(String type){return new JSONObject().put("@type",type);}
   public static byte[] contentFor(int id){
     return switch(id){
@@ -47,7 +50,11 @@ public final class TdGateway {
       case 41:return new JSONObject().put("@type","messageDocument").put("document",new JSONObject().put("document",file(506)).put("file_name","notes.pdf").put("mime_type","application/pdf"));
       case 49:return new JSONObject().put("@type","messageAnimation").put("animation",new JSONObject().put("animation",file(507)).put("mime_type","video/mp4"));
       case 57:return new JSONObject().put("@type","messageSticker").put("sticker",new JSONObject().put("sticker",file(508)).put("mime_type","image/webp"));
-      default:return new JSONObject().put("@type","messageText").put("text",new JSONObject().put("text","Synthetic #"+id));
+      default:{
+        StringBuilder body=new StringBuilder("Synthetic #"+id);
+        if(wordsPerMessage>0){body.setLength(0);for(int k=0;k<wordsPerMessage;k++){if(k>0)body.append(' ');body.append("слово").append(k);}}
+        return new JSONObject().put("@type","messageText").put("text",new JSONObject().put("text",body.toString()));
+      }
     }
   }
   private File cached(int id) { return new File(root,"tdlib/files/file-"+id+".bin"); }
@@ -69,7 +76,7 @@ public final class TdGateway {
           .put("content",content(6,ids[6])));
         return new JSONObject().put("messages",arr);
       }
-      for(int i=start;i<ids.length&&i<start+Math.min(7,limit);i++){
+      for(int i=start;i<ids.length&&i<start+Math.min(pageBatch,limit);i++){
         JSONObject message=messageOverrides.containsKey(i)
           ?new JSONObject(messageOverrides.get(i).toString())
           :new JSONObject().put("id",ids[i])
@@ -86,9 +93,10 @@ public final class TdGateway {
       int id=req.getInt("file_id");if(id==failFileId)throw new IOException("SIMULATED_MEDIA_DOWNLOAD_ERROR");
       File f=cached(id);f.getParentFile().mkdirs();
       try(OutputStream out=new FileOutputStream(f)){
-        if(largeVideo && id==503){
-          byte[] chunk=new byte[65536];Arrays.fill(chunk,(byte)0x6a);
-          for(int i=0;i<48*1024*1024/chunk.length;i++)out.write(chunk);
+        if((largeVideo||randomLargeVideo) && id==503){
+          byte[] chunk=new byte[65536];java.util.Random rng=randomLargeVideo?new java.util.Random(239294L):null;
+          if(rng==null)Arrays.fill(chunk,(byte)0x6a);
+          for(int i=0;i<48*1024*1024/chunk.length;i++){if(rng!=null)rng.nextBytes(chunk);out.write(chunk);}
         }else out.write(contentFor(id));
       }
       return new JSONObject().put("id",id).put("size",f.length())
