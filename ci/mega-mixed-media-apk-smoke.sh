@@ -87,7 +87,7 @@ if test "$DONE" -ne 1;then
   cat /tmp/heavy-vault/ui.xml
   exit 46
 fi
-FILE=/sdcard/Download/Vault_MEGA_1080000_WORDS.tva
+FILE=/sdcard/Download/Vault_MEGA_1079840_WORDS.tva
 adb shell test -s "$FILE" || { echo 'Completed UI, but output file missing';exit 47; }
 adb exec-out cat "$FILE" > /tmp/heavy-vault/out.tva
 python3 - <<'PY'
