@@ -7,9 +7,9 @@ def telegramEnvironment = providers.gradleProperty('telegramEnvironment').orElse
 // production configuration. This is NOT a production release channel.
 if (gradle.startParameter.taskNames.any {
         def task = it.toLowerCase(java.util.Locale.ROOT)
-        task.contains('sandboxdc') || task.contains('testdc')
+        task.contains('sandboxdc') || task.contains('networkdc')
     } && telegramEnvironment != 'test')
-    throw new GradleException('sandboxDc/testDc APK must always use telegramEnvironment=test')
+    throw new GradleException('sandboxDc/networkDc APK must always use telegramEnvironment=test')
 def productionApproved = providers.gradleProperty('approveProductionBuild').orElse('false').get() == 'true'
 if (!(telegramEnvironment in ['test', 'production']))
     throw new GradleException('telegramEnvironment must be test or production')
@@ -58,19 +58,19 @@ android {
             signingConfig signingConfigs.debug
             minifyEnabled false
             applicationIdSuffix '.testnet'
-            versionNameSuffix '-testdc'
+            versionNameSuffix '-networkdc'
             matchingFallbacks = ['release']
             buildConfigField 'boolean', 'TELEGRAM_TEST_DC', 'true'
             buildConfigField 'boolean', 'ALLOW_PRODUCTION', 'false'
         }
         // Deliberate, non-debuggable NETWORK test build. Separate package,
         // explicitly opt-in, only TEST DC. Offline variants remain disconnected.
-        testDc {
+        networkDc {
             initWith release
             signingConfig signingConfigs.debug  // alpha QA only, never distribute as release
             minifyEnabled false
             applicationIdSuffix '.networktest'
-            versionNameSuffix '-testdc-network'
+            versionNameSuffix '-networkdc-network'
             matchingFallbacks = ['release']
             buildConfigField 'boolean', 'TELEGRAM_TEST_DC', 'true'
             buildConfigField 'boolean', 'ALLOW_PRODUCTION', 'false'
@@ -89,14 +89,14 @@ tasks.register('verifyExporterBuild') {
             throw new GradleException('Missing official Android arm64-v8a TDLib binary: libtdjson.so')
         if (telegramEnvironment == 'production' && !productionApproved)
             throw new GradleException('Production mode requires explicit approval')
-        // Never quietly build network testDc for production.
-        if (gradle.startParameter.taskNames.any { it.toLowerCase(java.util.Locale.ROOT).contains('testdc') }
+        // Never quietly build network networkDc for production.
+        if (gradle.startParameter.taskNames.any { it.toLowerCase(java.util.Locale.ROOT).contains('networkdc') }
                 && telegramEnvironment != 'test')
-            throw new GradleException('Network testDc APK must use Telegram test environment')
+            throw new GradleException('Network networkDc APK must use Telegram test environment')
         // Offline-only APKs must never request real Telegram credentials. This
         // exception is *only* for a single explicit test-environment task whose
         // manifest removes INTERNET, with an independently enforced UI fence.
-        // Any other task (including assembleTestDc / assembleRelease / assemble)
+        // Any other task (including assembleNetworkDc / assembleRelease / assemble)
         // still requires the developer's API credentials.
         def tasksRequested = gradle.startParameter.taskNames
         def offlineBuildType = tasksRequested.size() == 1 &&
