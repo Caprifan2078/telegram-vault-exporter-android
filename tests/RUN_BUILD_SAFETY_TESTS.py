@@ -45,7 +45,8 @@ with TemporaryDirectory(prefix='tdlib-elf-test-') as tmp:
     c=dir/'fake.c'
     c.write_text('int td_create_client_id(void){return 1;} '
                  'void td_send(int id,const char*q){(void)id;(void)q;} '
-                 'const char*td_receive(double n){(void)n;return "{}";}')
+                 'const char*td_receive(double n){(void)n;return "{}";} '
+                 'const char*td_execute(const char*q){(void)q;return "{}";}')
     elf=dir/'libtdjson.so'
     subprocess.run(['gcc','-shared','-fPIC',str(c),'-o',str(elf)],check=True)
     with elf.open('ab') as f: f.write(b'\\0'*(512_001-elf.stat().st_size))
