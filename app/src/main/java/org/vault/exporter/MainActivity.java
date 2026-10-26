@@ -238,7 +238,7 @@ public final class MainActivity extends Activity {
         Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("application/octet-stream");
-        intent.putExtra(Intent.EXTRA_TITLE,"Vault_MEGA_1080000_WORDS.tva");
+        intent.putExtra(Intent.EXTRA_TITLE,"Vault_MEGA_1079840_WORDS.tva");
         try {startActivityForResult(intent,CREATE_MEGA_EXPORT);}
         catch(RuntimeException e){exporting=false;showStatus("Сохранение недоступно. Повтори попытку.");}
       }).show();
