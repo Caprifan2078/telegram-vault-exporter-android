@@ -93,9 +93,18 @@ assert """offlineManifest.text.contains('tools:node="remove"')""" in gradle
 assert "activitySource.contains('BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK')" in gradle
 assert "activitySource.contains('if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)')" in gradle
 assert 'offlineSandboxOnly' not in gradle
-assert 'Offline APK must contain NO Telegram API credentials' in gradle
+assert 'QA APK must embed NO Telegram API credentials' in gradle
+assert 'noEmbeddedKeysNetworkDc = telegramEnvironment ==' in gradle
+assert "endsWith('assemblenetworkdc')" in gradle
+assert 'requestTestDcApiCredentials()' in activity
+assert 'testApiHash = null;' in activity
+assert 'testApiId = 0;' in activity
+assert 'BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiId : BuildConfig.TELEGRAM_API_ID' in activity
+assert 'BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiHash : BuildConfig.TELEGRAM_API_HASH' in activity
+assert 'new_verbosity_level' in (ROOT/'app/src/main/cpp/vaultbridge.cpp').read_text()
+assert 'logStreamEmpty' in (ROOT/'app/src/main/cpp/vaultbridge.cpp').read_text()
 assert 'Missing developer Telegram API credentials' in gradle
-print('PASS: zero-secret offline APK build gate; network APK requires developer credentials')
+print('PASS: zero-secret offline and runtime-credential network QA builds')
 
 assert "networkDc {" in gradle and "applicationIdSuffix '.networktest'" in gradle
 assert "buildConfigField 'boolean', 'ALLOW_TEST_DC_NETWORK', 'false'" in gradle
@@ -113,6 +122,8 @@ assert 'private void beginConnect()' in activity
 assert '.put("use_test_dc",BuildConfig.TELEGRAM_TEST_DC)' in activity
 assert 'if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)' in activity
 assert 'button("Подключить тестовый Telegram (отдельный аккаунт)", this::askBeforeConnect);' in activity
+assert "TEST_DC_PACKAGE = 'org.vault.exporter.sandbox.networktest'" in (ROOT/'scripts/verify_offline_apk.py').read_text()
+assert "parser.add_argument('--network-test'" in (ROOT/'scripts/verify_offline_apk.py').read_text()
 print('PASS: isolated opt-in test-DC network build; offline variants remain disconnected')
 
 # Pinned native build recipe must use current supported OpenSSL, not old 1.1.1.
