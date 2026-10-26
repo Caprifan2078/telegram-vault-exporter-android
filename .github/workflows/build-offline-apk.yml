@@ -1,0 +1,68 @@
+name: One-shot public offline APK build (no Telegram credentials)
+
+# Only adding this workflow on the experimental branch triggers native compilation.
+# Unrelated source pushes never automatically retrigger this expensive job.
+on:
+  push:
+    branches:
+      - feat/isolated-testdc-android-build-20261026
+    paths:
+      - .github/workflows/build-offline-apk.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vault-android-offline-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-arm64-apk:
+    # Never consume paid GitHub-hosted minutes while private.
+    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.event_name == 'push') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout source without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.7 for Android Gradle Plugin 8.6.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+          cache-disabled: true
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android platform, NDK and CMake
+        run: |
+          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;26.3.11579264'
+      - name: Static source safeguards before compiling
+        run: |
+          python3 tests/RUN_BUILD_SAFETY_TESTS.py
+          python3 ci-contract/verify_ci_contract.py
+      - name: Compile pinned official TDLib arm64
+        env:
+          VAULT_ALLOW_PUBLIC_CI_TDLIB_BUILD: '1'
+        run: bash scripts/build_official_tdlib_android.sh
+      - name: Assemble credential-free offline demo APK
+        run: |
+          gradle --no-daemon --stacktrace :app:assembleDebug -PtelegramEnvironment=test -PtelegramApiId=0 -PtelegramApiHash=
+      - name: Inspect compiled APK permissions and package
+        run: |
+          python3 scripts/verify_offline_apk.py app/build/outputs/apk/debug/app-debug.apk \
+            --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt"
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
+      - name: Publish ONLY the strictly offline demo APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: VaultExporter-offline-qa-arm64-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 1
