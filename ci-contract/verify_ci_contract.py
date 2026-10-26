@@ -18,7 +18,18 @@ workflow_path = '.github/workflows/public-offline-qa.yml'
 workflow = read(workflow_path)
 # The migrated repository intentionally has NO network or APK-building CI.
 actual = {p.name for p in (root / '.github/workflows').glob('*.yml')}
-assert actual == {'public-offline-qa.yml'}, 'Unexpected workflow needs independent review: ' + repr(actual)
+assert actual == {'public-offline-qa.yml', 'build-offline-apk.yml'}, 'Unexpected workflow needs independent review: ' + repr(actual)
+manual = read('.github/workflows/build-offline-apk.yml')
+assert 'github.event.repository.private == false' in manual, 'Native CI must be public only'
+assert 'persist-credentials: false' in manual, 'Checkout tokens must not persist'
+assert 'timeout-minutes: 60' in manual and 'cancel-in-progress: true' in manual, 'Unbounded native build'
+assert 'contents: read' in manual and 'secrets.' not in manual and 'pull_request_target:' not in manual, 'Unexpected CI permissions or secrets'
+assert 'VAULT_ALLOW_PUBLIC_CI_TDLIB_BUILD:' in manual and 'scripts/build_official_tdlib_android.sh' in manual
+assert ':app:assembleDebug' in manual and '-PtelegramApiId=0' in manual and '-PtelegramApiHash=' in manual
+assert 'scripts/verify_offline_apk.py' in manual and 'retention-days: 1' in manual
+assert 'app/build/outputs/apk/debug/app-debug.apk' in manual and 'upload-artifact@v4' in manual
+assert 'feat/isolated-testdc-android-build-20261026' in manual
+assert '    paths:' in manual, 'One-shot native workflow must use a restricted push path'
 assert 'github.event.repository.private == false' in workflow, 'Private hosted jobs must be disabled'
 assert re.search(r'(?m)^permissions:\s*\n\s+contents:\s*read\s*$', workflow), 'Read-only CI permissions missing'
 assert 'cancel-in-progress: true' in workflow and 'timeout-minutes: 15' in workflow, 'Bounded CI missing'
