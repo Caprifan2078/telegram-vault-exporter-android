@@ -87,7 +87,7 @@ final class MegaArchiveVerifier {
     if(!formats.contains("stickerFormatTgs")||!formats.contains("stickerFormatWebp"))
       throw new IOException("Missing sticker formats");
     if(messages!=MegaMockTdlib.MESSAGE_COUNT || attachments!=MegaMockTdlib.MEDIA_COUNT ||
-        mediaFiles!=MegaMockTdlib.MEDIA_COUNT ||previewItems!=2 ||words<1_000_000L)
+        mediaFiles!=MegaMockTdlib.MEDIA_COUNT ||previewItems!=2 ||words!=MegaMockTdlib.ARCHIVED_WORDS)
       throw new IOException("Incomplete mega export: messages="+messages+" words="+words+
         " attachments="+attachments+" files="+mediaFiles+" preview="+previewItems);
   }
