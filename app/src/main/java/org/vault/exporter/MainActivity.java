@@ -26,6 +26,9 @@ public final class MainActivity extends Activity {
   private String selectedChatTitle = "Чат";
   private boolean exporting = false;
   private volatile boolean logoutRequested = false;
+  // Network QA only. Entered on the phone; never written to the APK, disk or saved state.
+  private volatile int testApiId = 0;
+  private volatile String testApiHash = null;
   private final java.util.concurrent.atomic.AtomicBoolean initializing = new java.util.concurrent.atomic.AtomicBoolean(false);
   private final java.util.concurrent.atomic.AtomicBoolean nativeProbeRunning = new java.util.concurrent.atomic.AtomicBoolean(false);
   private final int CREATE_ARCHIVE = 718;
@@ -576,6 +579,10 @@ public final class MainActivity extends Activity {
     }
   }
   private void askBeforeConnect() {
+    if (BuildConfig.ALLOW_TEST_DC_NETWORK && (testApiId <= 0 || testApiHash == null)) {
+      requestTestDcApiCredentials();
+      return;
+    }
     if(BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK){
       showStatus("Офлайн-сборка не подключается к Telegram. Используй вымышленный чат.");
       return;
@@ -586,8 +593,9 @@ public final class MainActivity extends Activity {
       showStatus("Подключение к основному Telegram запрещено конфигурацией этой сборки.");
       return;
     }
-    if (BuildConfig.TELEGRAM_API_ID <= 0 || BuildConfig.TELEGRAM_API_HASH.isEmpty()) {
-      showStatus("Для сетевого теста разработчик должен настроить Telegram API. Офлайн-демонстрация доступна без ключей.");
+    if (BuildConfig.ALLOW_TEST_DC_NETWORK ? (testApiId <= 0 || testApiHash == null)
+        : (BuildConfig.TELEGRAM_API_ID <= 0 || BuildConfig.TELEGRAM_API_HASH.isEmpty())) {
+      showStatus("Для подключения нужны собственные Telegram API ID и Hash.");
       return;
     }
     String notice = BuildConfig.TELEGRAM_TEST_DC
@@ -598,11 +606,50 @@ public final class MainActivity extends Activity {
       .setPositiveButton(BuildConfig.TELEGRAM_TEST_DC ? "Только тестовый сервер" : "Понимаю риск, подключить",
         (d, which) -> beginConnect()).show();
   }
+  private void requestTestDcApiCredentials() {
+    if (!BuildConfig.TELEGRAM_TEST_DC || !BuildConfig.ALLOW_TEST_DC_NETWORK || td != null) return;
+    LinearLayout fields = new LinearLayout(this);
+    fields.setOrientation(LinearLayout.VERTICAL);
+    fields.setPadding(dp(20), 0, dp(20), 0);
+    EditText id = new EditText(this), hash = new EditText(this);
+    id.setHint("API ID из my.telegram.org/apps");
+    id.setInputType(InputType.TYPE_CLASS_NUMBER);
+    id.setSingleLine(true);
+    hash.setHint("API Hash (32 символа)");
+    hash.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+    hash.setSingleLine(true);
+    for (EditText input : new EditText[]{id, hash}) {
+      input.setTextColor(WHITE);
+      input.setHintTextColor(MUTED);
+      fields.addView(input);
+    }
+    new AlertDialog.Builder(this).setTitle("Данные своего Telegram API")
+      .setMessage("Только тестовый Telegram. Используй собственные API ID и Hash, не отправляй их в чат или GitHub. Здесь они не сохраняются.")
+      .setView(fields).setNegativeButton("Отмена", null)
+      .setPositiveButton("Продолжить", (d, which) -> {
+        String idText = id.getText().toString().trim();
+        String hashText = hash.getText().toString().trim();
+        id.getText().clear();
+        hash.getText().clear();
+        int parsedId = 0;
+        try { parsedId = Integer.parseInt(idText); }
+        catch (NumberFormatException ignored) {}
+        if (parsedId <= 0 || !hashText.matches("[a-fA-F0-9]{32}")) {
+          showStatus("Неверные API ID или Hash. Получи свои на my.telegram.org/apps и повтори ввод.");
+          return;
+        }
+        testApiId = parsedId;
+        testApiHash = hashText;
+        askBeforeConnect();
+      }).show();
+  }
   private void closeFailedTdlibSession() {
     // Called only from the serialized worker; do not log Telegram data.
     TdGateway failed=td;
     td=null;
     initializing.set(false);
+    testApiId = 0;
+    testApiHash = null;
     if(failed!=null) {
       try {failed.stop();}catch(RuntimeException ignored) {
         // Never re-enable authentication using a potentially stale gateway.
@@ -611,6 +658,10 @@ public final class MainActivity extends Activity {
   }
 
   private void beginConnect() {
+    if (BuildConfig.ALLOW_TEST_DC_NETWORK && (testApiId <= 0 || testApiHash == null)) {
+      showStatus("Сначала введи свои API ID и Hash для тестового Telegram.");
+      return;
+    }
     if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)
         || (!BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_PRODUCTION)) {
       showStatus("Сетевое подключение заблокировано конфигурацией сборки.");
@@ -669,6 +720,10 @@ public final class MainActivity extends Activity {
         try {
           byte[] secret = new SessionSecrets(this).getOrCreate();
           try {
+          int apiId = BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiId : BuildConfig.TELEGRAM_API_ID;
+          String apiHash = BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiHash : BuildConfig.TELEGRAM_API_HASH;
+          if (apiId <= 0 || apiHash == null || !apiHash.matches("[a-fA-F0-9]{32}"))
+            throw new SecurityException("Нет локальных API данных для TDLib");
           JSONObject params=TdGateway.cmd("setTdlibParameters")
             .put("use_test_dc",BuildConfig.TELEGRAM_TEST_DC)
             .put("database_directory",new File(getFilesDir(),"tdlib/database").getAbsolutePath())
@@ -676,11 +731,16 @@ public final class MainActivity extends Activity {
             .put("database_encryption_key",Base64.encodeToString(secret,Base64.NO_WRAP))
             .put("use_file_database",true).put("use_chat_info_database",true)
             .put("use_message_database",true).put("use_secret_chats",false)
-            .put("api_id",BuildConfig.TELEGRAM_API_ID).put("api_hash",BuildConfig.TELEGRAM_API_HASH)
+            .put("api_id",apiId).put("api_hash",apiHash)
             .put("system_language_code",Locale.getDefault().getLanguage())
             .put("device_model",android.os.Build.MODEL).put("system_version",android.os.Build.VERSION.RELEASE)
             .put("application_version","0.9-test-gated-alpha");
           td.await(params,30);
+          // Keep no developer API hash in Activity memory after TDLib has accepted it.
+          if (BuildConfig.ALLOW_TEST_DC_NETWORK) {
+            testApiHash = null;
+            testApiId = 0;
+          }
           } finally {Arrays.fill(secret,(byte)0);}
         } catch(Exception e) {
           // Parameter rejection can leave a live native client that makes all
