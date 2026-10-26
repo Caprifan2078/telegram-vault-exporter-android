@@ -48,6 +48,21 @@ public final class TestTdGatewayLifecycle {
           check(refused,"TEST DC allowed a real or malformed phone number");
           check(TdNative.outbound.isEmpty(),"Unsafe phone number reached native transport");
         }
+        // Shared Test DC numbers may be taken over by someone who enabled
+        // their own 2FA or email. Never collect/send real personal secrets.
+        for(String method : new String[]{
+            "checkAuthenticationPassword", "setAuthenticationEmailAddress", "checkAuthenticationEmailCode"}) {
+          boolean rejected=false;
+          try {
+            JSONObject request=TdGateway.cmd(method);
+            if(method.equals("checkAuthenticationPassword"))request.put("password","personal-password-must-not-send");
+            else if(method.equals("setAuthenticationEmailAddress"))request.put("email_address","private@example.com");
+            else request.put("code",TdGateway.cmd("emailAddressAuthenticationCode").put("code","11111"));
+            isolatedTest.call(request);
+          } catch(SecurityException expected){rejected=true;}
+          check(rejected,"Shared Test DC allowed personal authentication RPC: "+method);
+          check(TdNative.outbound.isEmpty(),"Personal email or 2FA secret leaked to JNI: "+method);
+        }
         CompletableFuture<JSONObject> testPhone=isolatedTest.call(TdGateway.cmd("setAuthenticationPhoneNumber")
           .put("phone_number","+9996621234"));
         String sentPhone=TdNative.outbound.poll(2,TimeUnit.SECONDS);
