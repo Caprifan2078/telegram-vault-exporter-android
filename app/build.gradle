@@ -93,19 +93,29 @@ tasks.register('verifyExporterBuild') {
         if (gradle.startParameter.taskNames.any { it.toLowerCase(java.util.Locale.ROOT).contains('testdc') }
                 && telegramEnvironment != 'test')
             throw new GradleException('Network testDc APK must use Telegram test environment')
-        // The *single* isolated offline sandbox build requires no Telegram API key.
-        // The sandbox manifest removes INTERNET and the UI disables all login.
-        // This exception must never apply to production or other build tasks.
+        // Offline-only APKs must never request real Telegram credentials. This
+        // exception is *only* for a single explicit test-environment task whose
+        // manifest removes INTERNET, with an independently enforced UI fence.
+        // Any other task (including assembleTestDc / assembleRelease / assemble)
+        // still requires the developer's API credentials.
         def tasksRequested = gradle.startParameter.taskNames
-        def offlineSandboxOnly = telegramEnvironment == 'test' &&
-            tasksRequested.size() == 1 &&
-            tasksRequested[0].toLowerCase(java.util.Locale.ROOT).endsWith('assemblesandboxdc') &&
-            file('src/sandboxDc/AndroidManifest.xml').text.contains('tools:node="remove"') &&
-            file('src/main/java/org/vault/exporter/MainActivity.java').text.contains(
-                'if(BuildConfig.TELEGRAM_TEST_DC){')
-        if (offlineSandboxOnly) {
+        def offlineBuildType = tasksRequested.size() == 1 &&
+            tasksRequested[0].toLowerCase(java.util.Locale.ROOT).endsWith('assemblesandboxdc')
+                ? 'sandboxDc'
+                : (tasksRequested.size() == 1 &&
+                   tasksRequested[0].toLowerCase(java.util.Locale.ROOT).endsWith('assembledebug')
+                     ? 'debug' : null)
+        def offlineManifest = offlineBuildType == null ? null :
+            file("src/${offlineBuildType}/AndroidManifest.xml")
+        def activitySource = file('src/main/java/org/vault/exporter/MainActivity.java').text
+        def offlineDemoOnly = telegramEnvironment == 'test' && offlineManifest != null &&
+            offlineManifest.isFile() &&
+            offlineManifest.text.contains('tools:node="remove"') &&
+            activitySource.contains('BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK') &&
+            activitySource.contains('if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)')
+        if (offlineDemoOnly) {
             if (telegramId != '0' || telegramHash != '')
-                throw new GradleException('Offline training APK must contain NO Telegram API credentials')
+                throw new GradleException('Offline APK must contain NO Telegram API credentials')
         } else if (!(telegramId ==~ /[1-9][0-9]*/) || !(telegramHash ==~ /[a-fA-F0-9]{32}/)) {
             throw new GradleException('Missing developer Telegram API credentials (telegramApiId/telegramApiHash)')
         }
