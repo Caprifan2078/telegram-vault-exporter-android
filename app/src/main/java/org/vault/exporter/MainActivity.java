@@ -19,7 +19,7 @@ import java.util.concurrent.*;
 /** A minimal native Android UI. No browser server, Termux, commands or analytics. */
 public final class MainActivity extends Activity {
   private final ExecutorService worker = Executors.newSingleThreadExecutor();
-  private TdGateway td;
+  private volatile TdGateway td;
   private LinearLayout root, interactive;
   private TextView status, selected;
   private long selectedChatId = 0;
@@ -598,6 +598,18 @@ public final class MainActivity extends Activity {
       .setPositiveButton(BuildConfig.TELEGRAM_TEST_DC ? "Только тестовый сервер" : "Понимаю риск, подключить",
         (d, which) -> beginConnect()).show();
   }
+  private void closeFailedTdlibSession() {
+    // Called only from the serialized worker; do not log Telegram data.
+    TdGateway failed=td;
+    td=null;
+    initializing.set(false);
+    if(failed!=null) {
+      try {failed.stop();}catch(RuntimeException ignored) {
+        // Never re-enable authentication using a potentially stale gateway.
+      }
+    }
+  }
+
   private void beginConnect() {
     if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)
         || (!BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_PRODUCTION)) {
@@ -614,8 +626,14 @@ public final class MainActivity extends Activity {
         JSONObject stateObj = td.await(TdGateway.cmd("getAuthorizationState"),30);
         onAuthorizationState(stateObj);
       } catch(Throwable e) {
-        showStatus("Ошибка TDLib: " + e.getClass().getSimpleName() + ". Сеанс не подтверждён.");
-        runOnUiThread(() -> {clearUi(); button("Вернуться", this::showWelcome);});
+        closeFailedTdlibSession();
+        showStatus("Ошибка TDLib: " + e.getClass().getSimpleName() + ". Неуспешный сеанс закрыт.");
+        runOnUiThread(() -> {
+          if (!isFinishing() && !isDestroyed()) {
+            clearUi();
+            button("Вернуться", this::showWelcome);
+          }
+        });
       }
     });
   }
@@ -664,7 +682,19 @@ public final class MainActivity extends Activity {
             .put("application_version","0.9-test-gated-alpha");
           td.await(params,30);
           } finally {Arrays.fill(secret,(byte)0);}
-        } catch(Exception e) { initializing.set(false); showStatus("Не удалось настроить TDLib: " + e.getMessage()); }
+        } catch(Exception e) {
+          // Parameter rejection can leave a live native client that makes all
+          // subsequent Connect taps report "already connected".
+          // Fail closed: stop its event pump and allow a clean retry.
+          closeFailedTdlibSession();
+          showStatus("Не удалось настроить TDLib. Сеанс закрыт, можно повторить вход.");
+          runOnUiThread(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+              clearUi();
+              button("Повторить подключение", this::showWelcome);
+            }
+          });
+        }
       });
       return;
     }
