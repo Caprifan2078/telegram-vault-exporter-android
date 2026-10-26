@@ -366,7 +366,10 @@ public final class ExportEngine {
     if("messageText".equals(kind)){
       JSONObject preview=c.optJSONObject("link_preview");
       if(preview==null)return result;
+      // TDLib link-preview variants may encode the discriminator as @type.
+      // A missing/unknown discriminator must never silently hide rich media.
       String previewType=preview.optString("type","");
+      if(previewType.isEmpty())previewType=preview.optString("@type","");
       JSONObject p=preview.optJSONObject("photo"),v=preview.optJSONObject("video");
       JSONObject doc=preview.optJSONObject("document"),anim=preview.optJSONObject("animation");
       JSONObject audio=preview.optJSONObject("audio");
