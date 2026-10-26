@@ -582,7 +582,17 @@ public final class MainActivity extends Activity {
       dialog.setMessage("Не удалось начать офлайн-проверку. Перезапусти приложение.");
     }
   }
+  // Credentials only live during a user-approved Test DC connection attempt.
+  // In particular, do not retain an API hash after the user cancels consent.
+  private void clearPendingTestApiCredentials() {
+    testApiId = 0;
+    testApiHash = null;
+  }
   private void askBeforeConnect() {
+    if (td != null) {
+      showStatus("Сеанс Telegram уже запущен. Заверши его перед новым подключением.");
+      return;
+    }
     if (BuildConfig.ALLOW_TEST_DC_NETWORK && (testApiId <= 0 || testApiHash == null)) {
       requestTestDcApiCredentials();
       return;
@@ -606,7 +616,8 @@ public final class MainActivity extends Activity {
       ? "Будут использованы только тестовые серверы Telegram. Не вводите здесь информацию о настоящих переписках. Тестовый вход может быть недоступен."
       : "Это НЕОФИЦИАЛЬНЫЙ клиент. Telegram предупреждает о дополнительной проверке таких клиентов. Нулевой риск для аккаунта гарантировать нельзя. Не подключайте важный аккаунт, если не готовы принять этот риск.";
     new AlertDialog.Builder(this).setTitle("Подтвердить подключение")
-      .setMessage(notice).setNegativeButton("Отмена",null)
+      .setMessage(notice).setNegativeButton("Отмена",(dialog,which)->clearPendingTestApiCredentials())
+      .setOnCancelListener(dialog->clearPendingTestApiCredentials())
       .setPositiveButton(BuildConfig.TELEGRAM_TEST_DC ? "Только тестовый сервер" : "Понимаю риск, подключить",
         (d, which) -> beginConnect()).show();
   }
@@ -629,7 +640,17 @@ public final class MainActivity extends Activity {
     }
     new AlertDialog.Builder(this).setTitle("Данные своего Telegram API")
       .setMessage("Только тестовый Telegram. Используй собственные API ID и Hash, не отправляй их в чат или GitHub. Здесь они не сохраняются.")
-      .setView(fields).setNegativeButton("Отмена", null)
+      .setView(fields)
+      .setNegativeButton("Отмена", (dialog,which)->{
+        id.getText().clear();
+        hash.getText().clear();
+        clearPendingTestApiCredentials();
+      })
+      .setOnCancelListener(dialog->{
+        id.getText().clear();
+        hash.getText().clear();
+        clearPendingTestApiCredentials();
+      })
       .setPositiveButton("Продолжить", (d, which) -> {
         String idText = id.getText().toString().trim();
         String hashText = hash.getText().toString().trim();
@@ -652,8 +673,7 @@ public final class MainActivity extends Activity {
     TdGateway failed=td;
     td=null;
     initializing.set(false);
-    testApiId = 0;
-    testApiHash = null;
+    clearPendingTestApiCredentials();
     if(failed!=null) {
       try {failed.stop();}catch(RuntimeException ignored) {
         // Never re-enable authentication using a potentially stale gateway.
@@ -775,12 +795,24 @@ public final class MainActivity extends Activity {
             value -> TdGateway.cmd("setAuthenticationPhoneNumber").put("phone_number", value)); break;
         case "authorizationStateWaitCode": authInput("Код подтверждения из Telegram", "Код", false, "Подтвердить",
             value -> TdGateway.cmd("checkAuthenticationCode").put("code", value)); break;
-        case "authorizationStateWaitPassword": authInput("Пароль двухэтапной аутентификации", "Пароль", true, "Подтвердить",
-            value -> TdGateway.cmd("checkAuthenticationPassword").put("password",value)); break;
-        case "authorizationStateWaitEmailAddress": authInput("Email, запрошенный Telegram", "Электронная почта", false, "Отправить код",
-            value -> TdGateway.cmd("setAuthenticationEmailAddress").put("email_address",value)); break;
-        case "authorizationStateWaitEmailCode": authInput("Код подтверждения электронной почты", "Код",false,"Подтвердить",
-            value -> TdGateway.cmd("checkAuthenticationEmailCode").put("code",TdGateway.cmd("emailAddressAuthenticationCode").put("code",value))); break;
+        case "authorizationStateWaitPassword":
+          if(BuildConfig.ALLOW_TEST_DC_NETWORK)
+            message("ОСТАНОВИСЬ: публичный тестовый номер запросил пароль 2FA. Не вводи пароль личного Telegram. Выбери другой безопасный тестовый сценарий.");
+          else authInput("Пароль двухэтапной аутентификации", "Пароль", true, "Подтвердить",
+            value -> TdGateway.cmd("checkAuthenticationPassword").put("password",value));
+          break;
+        case "authorizationStateWaitEmailAddress":
+          if(BuildConfig.ALLOW_TEST_DC_NETWORK)
+            message("ОСТАНОВИСЬ: для общедоступного тестового номера нужен email. Настоящую почту не вводи.");
+          else authInput("Email, запрошенный Telegram", "Электронная почта", false, "Отправить код",
+            value -> TdGateway.cmd("setAuthenticationEmailAddress").put("email_address",value));
+          break;
+        case "authorizationStateWaitEmailCode":
+          if(BuildConfig.ALLOW_TEST_DC_NETWORK)
+            message("ОСТАНОВИСЬ: вход потребовал код электронной почты. Не используй личный email.");
+          else authInput("Код подтверждения электронной почты", "Код",false,"Подтвердить",
+            value -> TdGateway.cmd("checkAuthenticationEmailCode").put("code",TdGateway.cmd("emailAddressAuthenticationCode").put("code",value)));
+          break;
         case "authorizationStateWaitRegistration": showTestRegistration(state); break;
         case "authorizationStateReady": showStatus("Подключено напрямую к Telegram. Выбери переписку."); showReady(); break;
         case "authorizationStateLoggingOut": showStatus("Завершаем только сеанс экспортёра…"); break;
@@ -1165,6 +1197,7 @@ public final class MainActivity extends Activity {
     // Abandoning the picker must not retain the vault password in the Activity.
     if(pendingPassphrase!=null){Arrays.fill(pendingPassphrase,'\0');pendingPassphrase=null;}
     pendingChatId=0;
+    clearPendingTestApiCredentials();
     if(td!=null) td.stop();
     worker.shutdownNow();
     super.onDestroy();
