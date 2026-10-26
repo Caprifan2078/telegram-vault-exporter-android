@@ -27,7 +27,11 @@ assert 'contents: read' in manual and 'secrets.' not in manual and 'pull_request
 assert 'VAULT_ALLOW_PUBLIC_CI_TDLIB_BUILD:' in manual and 'scripts/build_official_tdlib_android.sh' in manual
 assert 'VAULT_PUBLIC_REPOSITORY_CONFIRMED: ${{ github.event.repository.private == false }}' in manual
 assert ':app:assembleDebug' in manual and '-PtelegramApiId=0' in manual and '-PtelegramApiHash=' in manual
-assert 'scripts/verify_offline_apk.py' in manual and 'retention-days: 1' in manual
+assert 'scripts/verify_offline_apk.py' in manual and 'retention-days: 14' in manual
+assert ':app:assembleNetworkDc' in manual and '--network-test' in manual
+assert 'VaultExporter-Telegram-TestDC-arm64-apk' in manual
+assert 'bash native-host-test/RUN_NATIVE_HOST_TEST.sh' in manual
+assert 'bash transport-jvm/RUN_TRANSPORT_JVM.sh' in manual
 assert 'app/build/outputs/apk/debug/app-debug.apk' in manual and 'upload-artifact@v4' in manual
 assert 'feat/isolated-testdc-android-build-20261026' in manual
 assert '    paths:' in manual, 'One-shot native workflow must use a restricted push path'
