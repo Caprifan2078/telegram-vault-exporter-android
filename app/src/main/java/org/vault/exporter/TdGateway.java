@@ -59,6 +59,13 @@ public final class TdGateway {
     String method = request == null ? "" : request.optString("@type", "");
     if (!ALLOWED_REQUESTS.contains(method) || ("registerUser".equals(method) && !allowTestRegistration))
       throw new SecurityException("Unauthorized Telegram RPC blocked by read-only export policy");
+    // Telegram Test DC numbers are shared/public. A stranger may have enabled
+    // email or 2FA on that test identity. Reject these methods below the UI,
+    // before they can reach TDLib's native transport. No real credentials ever.
+    if (allowTestRegistration && ("checkAuthenticationPassword".equals(method)
+        || "setAuthenticationEmailAddress".equals(method)
+        || "checkAuthenticationEmailCode".equals(method)))
+      throw new SecurityException("Test DC forbids personal 2FA and email authentication");
     // Fail-closed: this QA APK must NEVER submit the owner's real phone number,
     // even to a test DC. Official shared test numbers are the only permitted ones.
     if (allowTestRegistration && "setAuthenticationPhoneNumber".equals(method)) {
