@@ -14,6 +14,9 @@ public final class TdGateway {
   public void misrouteChatMetadata(){misroutedChatMetadata=true;}
   public void misrouteStalledProbe(){misrouteStalledProbe=true;}
   final Map<Integer,JSONObject> overrides=new HashMap<>();
+  final Map<Integer,JSONObject> messageOverrides=new HashMap<>();
+  /** Exact synthetic TDLib message response override, never a network call. */
+  public void messageOverride(int position,JSONObject message){messageOverrides.put(position,message);}
   public void contentOverride(int position, JSONObject replacement){overrides.put(position,replacement);}
   public TdGateway(long[] ids,File root){this.ids=ids;this.root=root;}
   public void failOnHistoryCall(int n){failHistoryAt=n;}
@@ -66,12 +69,17 @@ public final class TdGateway {
           .put("content",content(6,ids[6])));
         return new JSONObject().put("messages",arr);
       }
-      for(int i=start;i<ids.length&&i<start+Math.min(7,limit);i++)
-        arr.put(new JSONObject().put("id",ids[i])
-          .put("chat_id", (i==misroutedPosition ||
-              (misrouteStalledProbe && from==ids[6]-1 && i==7))?9999L:req.getLong("chat_id"))
-          .put("sender_id",new JSONObject().put("@type","messageSenderUser").put("user_id",55))
-          .put("content",overrides.getOrDefault(i,content(i,ids[i]))));
+      for(int i=start;i<ids.length&&i<start+Math.min(7,limit);i++){
+        JSONObject message=messageOverrides.containsKey(i)
+          ?new JSONObject(messageOverrides.get(i).toString())
+          :new JSONObject().put("id",ids[i])
+            .put("chat_id",req.getLong("chat_id"))
+            .put("sender_id",new JSONObject().put("@type","messageSenderUser").put("user_id",55))
+            .put("content",overrides.getOrDefault(i,content(i,ids[i])));
+        if(i==misroutedPosition || (misrouteStalledProbe && from==ids[6]-1 && i==7))
+          message.put("chat_id",9999L);
+        arr.put(message);
+      }
       return new JSONObject().put("messages",arr);
     }
     if(type.equals("downloadFile")){
