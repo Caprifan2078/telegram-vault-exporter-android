@@ -97,6 +97,17 @@ assert 'QA APK must embed NO Telegram API credentials' in gradle
 assert 'noEmbeddedKeysNetworkDc = telegramEnvironment ==' in gradle
 assert "endsWith('assemblenetworkdc')" in gradle
 assert 'requestTestDcApiCredentials()' in activity
+assert 'case "authorizationStateWaitRegistration": showTestRegistration(state); break;' in activity
+assert 'private void showTestRegistration(JSONObject authState)' in activity
+assert 'BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK' in activity
+assert 'registerUser' in activity
+assert 'BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK);' in activity
+transport=(ROOT/'app/src/main/java/org/vault/exporter/TdGateway.java').read_text()
+assert '"registerUser".equals(method) && !allowTestRegistration' in transport
+assert 'this(callback, false)' in transport
+assert 'new TdGateway(this::onTdEvent,' in activity
+assert 'disable_notification",true' in activity
+
 assert 'testApiHash = null;' in activity
 assert 'testApiId = 0;' in activity
 assert 'BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiId : BuildConfig.TELEGRAM_API_ID' in activity
