@@ -814,7 +814,13 @@ public final class MainActivity extends Activity {
             value -> TdGateway.cmd("checkAuthenticationEmailCode").put("code",TdGateway.cmd("emailAddressAuthenticationCode").put("code",value)));
           break;
         case "authorizationStateWaitRegistration": showTestRegistration(state); break;
-        case "authorizationStateReady": showStatus("Подключено напрямую к Telegram. Выбери переписку."); showReady(); break;
+        case "authorizationStateReady":
+          // An existing TDLib session can skip WaitTdlibParameters entirely.
+          // Do not keep the API Hash supplied at the new Connect prompt in memory.
+          clearPendingTestApiCredentials();
+          showStatus("Подключено напрямую к Telegram. Выбери переписку.");
+          showReady();
+          break;
         case "authorizationStateLoggingOut": showStatus("Завершаем только сеанс экспортёра…"); break;
         case "authorizationStateClosed":
           // Never erase the resumable archive here: a network-confirmed logout result
