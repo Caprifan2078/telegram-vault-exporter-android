@@ -2,9 +2,19 @@ package org.vault.exporter;
 
 import org.json.JSONObject;
 import java.util.concurrent.*;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class TdGateway {
+  // Read-only export API surface: auth and local cache cleanup are the only
+  // intentional side-effecting exceptions. No message/chat mutations.
+  private static final Set<String> ALLOWED_REQUESTS = Set.of(
+    "getAuthorizationState", "setTdlibParameters", "setAuthenticationPhoneNumber",
+    "setAuthenticationEmailAddress", "checkAuthenticationEmailCode",
+    "checkAuthenticationCode", "checkAuthenticationPassword", "logOut",
+    "getChats", "loadChats", "getChat", "getChatHistory", "getUser",
+    "downloadFile", "cancelDownloadFile", "deleteFile", "getFile"
+  );
   public interface Listener { void onUpdate(JSONObject event); }
   private final long client;
   private final ConcurrentHashMap<String, CompletableFuture<JSONObject>> pending = new ConcurrentHashMap<>();
@@ -38,6 +48,10 @@ public final class TdGateway {
   }
   public CompletableFuture<JSONObject> call(JSONObject request) {
     if(!running)throw new IllegalStateException("TDLib client is closed");
+    // Never log private request data. Reject unknown/write commands before JNI.
+    String method = request == null ? "" : request.optString("@type", "");
+    if (!ALLOWED_REQUESTS.contains(method))
+      throw new SecurityException("Unauthorized Telegram RPC blocked by read-only export policy");
     String id = Long.toString(sequence.incrementAndGet());
     CompletableFuture<JSONObject> result = new CompletableFuture<>();
     pending.put(id, result);
