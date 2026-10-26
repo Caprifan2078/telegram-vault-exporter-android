@@ -40,6 +40,20 @@ public final class TestTdGatewayLifecycle {
       check(TdNative.outbound.isEmpty(),"Registration was sent by an unauthorized client");
       TdGateway isolatedTest=new TdGateway(event->{},true);
       try {
+        for(String forbiddenPhone : new String[]{"+491701234567", "9996601234", "9996641234", "99966112", ""}) {
+          boolean refused=false;
+          try {isolatedTest.call(TdGateway.cmd("setAuthenticationPhoneNumber")
+            .put("phone_number",forbiddenPhone));}
+          catch(SecurityException expected){refused=true;}
+          check(refused,"TEST DC allowed a real or malformed phone number");
+          check(TdNative.outbound.isEmpty(),"Unsafe phone number reached native transport");
+        }
+        CompletableFuture<JSONObject> testPhone=isolatedTest.call(TdGateway.cmd("setAuthenticationPhoneNumber")
+          .put("phone_number","+9996621234"));
+        String sentPhone=TdNative.outbound.poll(2,TimeUnit.SECONDS);
+        check(sentPhone!=null && "setAuthenticationPhoneNumber".equals(new JSONObject(sentPhone).getString("@type")),
+          "Official test number was blocked");
+        testPhone.cancel(false);
         CompletableFuture<JSONObject> deliberate=isolatedTest.call(TdGateway.cmd("registerUser")
           .put("first_name","Test").put("last_name","").put("disable_notification",true));
         String emitted=TdNative.outbound.poll(2,TimeUnit.SECONDS);
