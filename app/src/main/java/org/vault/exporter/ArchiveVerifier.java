@@ -215,7 +215,7 @@ public final class ArchiveVerifier {
         entries++;zip.closeEntry();
         e=zip.getNextEntry();
         if(e==null||!e.getName().equals(page("media-index",pages)))throw new IOException("Нет индекса медиа для страницы "+pages);
-        LinkedHashMap<String,Media> referenced=new LinkedHashMap<>();HashSet<Long> usedIds=new HashSet<>();
+        LinkedHashMap<String,Media> referenced=new LinkedHashMap<>();HashSet<String> usedFileRefs=new HashSet<>();
         rows=new Lines(zip,MAX_INDEX_LINE);
         while((line=rows.next())!=null){
           Map<String,Scalar> fields=new Json(line).fields();
@@ -223,7 +223,12 @@ public final class ArchiveVerifier {
           long fileId=number(fields,"file_id",1,Integer.MAX_VALUE);
           long length=number(fields,"bytes",0,Long.MAX_VALUE);
           String path=str(fields,"path"),sha=str(fields,"sha256");
-          if(!pageIds.contains(msgId)||!usedIds.add(msgId))throw new IOException("Повтор или чужое медиа: "+msgId);
+          if(!pageIds.contains(msgId))throw new IOException("Медиа ссылается на чужое сообщение: "+msgId);
+          // One Telegram message can contain multiple full-resolution files
+          // (paid-media carousel, animated chat photo or link-preview album).
+          // Reject duplicate message/file pairs even if their extensions differ.
+          if(!usedFileRefs.add(msgId+":"+fileId))
+            throw new IOException("Повторное вложение в сообщении: "+msgId+"/"+fileId);
           if(!path.matches("media/"+msgId+"/"+fileId+"\\.[a-z0-9]{1,8}"))throw new IOException("Неверный путь медиа: "+path);
           if(!sha.matches("[a-f0-9]{64}"))throw new IOException("Некорректный SHA-256 медиа");
           if(referenced.put(path,new Media(msgId,path,sha,length))!=null)throw new IOException("Повторное имя медиа: "+path);
