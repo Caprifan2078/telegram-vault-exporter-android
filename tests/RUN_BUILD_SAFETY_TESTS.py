@@ -104,6 +104,10 @@ assert 'registerUser' in activity
 assert 'BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK);' in activity
 transport=(ROOT/'app/src/main/java/org/vault/exporter/TdGateway.java').read_text()
 assert '"registerUser".equals(method) && !allowTestRegistration' in transport
+assert 'Only official 99966XYYYY test numbers' in transport
+assert 'setAuthenticationPhoneNumber' in transport
+assert '99966XYYYY (X=1–3)' in activity
+
 assert 'this(callback, false)' in transport
 assert 'new TdGateway(this::onTdEvent,' in activity
 assert 'disable_notification",true' in activity
