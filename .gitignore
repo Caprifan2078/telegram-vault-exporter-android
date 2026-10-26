@@ -48,3 +48,6 @@ ChatExport_*/
 *.zip
 *.7z
 *.rar
+
+# Native official TDLib binaries are verified locally, never tracked by Git.
+app/src/main/jniLibs/**/*.so

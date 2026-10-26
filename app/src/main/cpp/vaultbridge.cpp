@@ -11,6 +11,7 @@ static void* library = nullptr;
 static int (*create_client)() = nullptr;
 static void (*send_request)(int, const char*) = nullptr;
 static const char* (*receive_result)(double) = nullptr;
+static const char* (*execute_sync)(const char*) = nullptr;
 static std::once_flag init_once;
 
 static bool ready() {
@@ -20,10 +21,27 @@ static bool ready() {
     create_client = (int (*)())dlsym(library, "td_create_client_id");
     send_request = (void (*)(int, const char*))dlsym(library, "td_send");
     receive_result = (const char* (*)(double))dlsym(library, "td_receive");
+    execute_sync = (const char* (*)(const char*))dlsym(library, "td_execute");
   });
-  return library && create_client && send_request && receive_result;
+  return library && create_client && send_request && receive_result && execute_sync;
 }
 
+// Execute synchronous TDLib operations before creating ANY client. In particular,
+// prevent the verbose default logger from emitting private Telegram metadata.
+// Do not print responses even on error.
+static bool is_ok(const char* response) {
+  return response && std::strstr(response, "\"@type\":\"ok\"") != nullptr;
+}
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_vault_exporter_TdNative_disableSensitiveLogging(JNIEnv*, jclass) {
+  if (!ready()) return JNI_FALSE;
+  // Reduce diagnostic verbosity and remove the log output stream; fail closed.
+  if (!is_ok(execute_sync("{\"@type\":\"setLogVerbosityLevel\",\"new_verbosity_level\":0}")))
+    return JNI_FALSE;
+  if (!is_ok(execute_sync("{\"@type\":\"setLogStream\",\"log_stream\":{\"@type\":\"logStreamEmpty\"}}")))
+    return JNI_FALSE;
+  return JNI_TRUE;
+}
 extern "C" JNIEXPORT jlong JNICALL
 Java_org_vault_exporter_TdNative_createClient(JNIEnv*, jclass) {
   if (!ready()) return 0;

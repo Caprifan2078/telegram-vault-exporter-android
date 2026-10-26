@@ -1,6 +1,13 @@
 // OFFLINE TEST ONLY. Intentionally fake: never bundle in an Android APK.
 #include <string>
 static std::string reply;
+extern "C" const char* td_execute(const char* data) {
+  if (!data) return nullptr;
+  std::string value(data);
+  if (value.find("setLogVerbosityLevel") != std::string::npos ||
+      value.find("setLogStream") != std::string::npos) return "{\"@type\":\"ok\"}";
+  return "{\"@type\":\"error\"}";
+}
 extern "C" int td_create_client_id() { return 17; }
 extern "C" void td_send(int id, const char* data) {
   const std::string input = (id == 17 && data) ? std::string(data) : "";

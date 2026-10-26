@@ -22,6 +22,62 @@ public final class TestTdGatewayLifecycle {
     ExecutorService pool=Executors.newCachedThreadPool();
     TdGateway gw=new TdGateway(event->{});
     try {
+      // Network policy must never send or delete a user's messages, mark
+      // messages read, join chats, or accidentally enable unreviewed RPCs.
+      for (String forbidden : new String[]{"sendMessage", "deleteMessages", "viewMessages",
+           "joinChat", "addChatMember", "setChatTitle", "futureUnreviewedMethod", ""}) {
+        boolean blocked = false;
+        try { gw.call(TdGateway.cmd(forbidden)); }
+        catch (SecurityException expected) { blocked = true; }
+        check(blocked, "Unsafe Telegram RPC was accepted: " + forbidden);
+      }
+      check(TdNative.outbound.isEmpty(), "Blocked RPC leaked to native TDLib");
+      boolean productionRegistrationBlocked=false;
+      try { gw.call(TdGateway.cmd("registerUser")
+                .put("first_name","Test").put("last_name","")); }
+      catch(SecurityException expected){productionRegistrationBlocked=true;}
+      check(productionRegistrationBlocked,"Default gateway allowed silent user registration");
+      check(TdNative.outbound.isEmpty(),"Registration was sent by an unauthorized client");
+      TdGateway isolatedTest=new TdGateway(event->{},true);
+      try {
+        for(String forbiddenPhone : new String[]{"+491701234567", "9996601234", "9996641234", "99966112", ""}) {
+          boolean refused=false;
+          try {isolatedTest.call(TdGateway.cmd("setAuthenticationPhoneNumber")
+            .put("phone_number",forbiddenPhone));}
+          catch(SecurityException expected){refused=true;}
+          check(refused,"TEST DC allowed a real or malformed phone number");
+          check(TdNative.outbound.isEmpty(),"Unsafe phone number reached native transport");
+        }
+        // Shared Test DC numbers may be taken over by someone who enabled
+        // their own 2FA or email. Never collect/send real personal secrets.
+        for(String method : new String[]{
+            "checkAuthenticationPassword", "setAuthenticationEmailAddress", "checkAuthenticationEmailCode"}) {
+          boolean rejected=false;
+          try {
+            JSONObject request=TdGateway.cmd(method);
+            if(method.equals("checkAuthenticationPassword"))request.put("password","personal-password-must-not-send");
+            else if(method.equals("setAuthenticationEmailAddress"))request.put("email_address","private@example.com");
+            else request.put("code",TdGateway.cmd("emailAddressAuthenticationCode").put("code","11111"));
+            isolatedTest.call(request);
+          } catch(SecurityException expected){rejected=true;}
+          check(rejected,"Shared Test DC allowed personal authentication RPC: "+method);
+          check(TdNative.outbound.isEmpty(),"Personal email or 2FA secret leaked to JNI: "+method);
+        }
+        CompletableFuture<JSONObject> testPhone=isolatedTest.call(TdGateway.cmd("setAuthenticationPhoneNumber")
+          .put("phone_number","+9996621234"));
+        String sentPhone=TdNative.outbound.poll(2,TimeUnit.SECONDS);
+        check(sentPhone!=null && "setAuthenticationPhoneNumber".equals(new JSONObject(sentPhone).getString("@type")),
+          "Official test number was blocked");
+        testPhone.cancel(false);
+        CompletableFuture<JSONObject> deliberate=isolatedTest.call(TdGateway.cmd("registerUser")
+          .put("first_name","Test").put("last_name","").put("disable_notification",true));
+        String emitted=TdNative.outbound.poll(2,TimeUnit.SECONDS);
+        check(emitted!=null && "registerUser".equals(new JSONObject(emitted).getString("@type")),
+          "Explicit isolated TEST DC registration was not dispatched");
+        deliberate.cancel(false);
+        check(pending(isolatedTest).isEmpty(),"Test registration request leaked");
+      } finally {isolatedTest.stop();TdNative.flush();}
+
       // 150 asynchronous unanswered calls, all cancelled: no pending map growth.
       List<CompletableFuture<JSONObject>> jobs=new ArrayList<>();
       for(int i=0;i<150;i++)jobs.add(gw.call(TdGateway.cmd("getChatHistory")));

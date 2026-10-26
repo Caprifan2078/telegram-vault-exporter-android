@@ -45,7 +45,8 @@ with TemporaryDirectory(prefix='tdlib-elf-test-') as tmp:
     c=dir/'fake.c'
     c.write_text('int td_create_client_id(void){return 1;} '
                  'void td_send(int id,const char*q){(void)id;(void)q;} '
-                 'const char*td_receive(double n){(void)n;return "{}";}')
+                 'const char*td_receive(double n){(void)n;return "{}";} '
+                 'const char*td_execute(const char*q){(void)q;return "{}";}')
     elf=dir/'libtdjson.so'
     subprocess.run(['gcc','-shared','-fPIC',str(c),'-o',str(elf)],check=True)
     with elf.open('ab') as f: f.write(b'\\0'*(512_001-elf.stat().st_size))
@@ -76,3 +77,110 @@ assert 'Arrays.fill(pendingPassphrase' in activity
 assert 'final long resetChatId=selectedChatId;' in activity
 assert '"export-progress"),resetChatId,secret)' in activity
 print('PASS: pinned arm64-only TDLib build gate, ELF ABI negative fixtures, picker password-loss safety')
+
+# Test-DC NETWORK build is separate from all offline demonstrations and production.
+gradle=(ROOT/'app/build.gradle').read_text()
+manifest_main=(ROOT/'app/src/main/AndroidManifest.xml').read_text()
+manifest_debug=(ROOT/'app/src/debug/AndroidManifest.xml').read_text()
+manifest_sandbox=(ROOT/'app/src/sandboxDc/AndroidManifest.xml').read_text()
+# Regression: the network networkDc refactor changed MainActivity's offline fence.
+# An old Gradle string check silently broke credential-free offline builds.
+assert "offlineDemoOnly = telegramEnvironment == 'test'" in gradle
+assert "endsWith('assembledebug')" in gradle
+assert "endsWith('assemblesandboxdc')" in gradle
+assert "tasksRequested.size() == 1" in gradle
+assert """offlineManifest.text.contains('tools:node="remove"')""" in gradle
+assert "activitySource.contains('BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK')" in gradle
+assert "activitySource.contains('if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)')" in gradle
+assert 'offlineSandboxOnly' not in gradle
+assert 'QA APK must embed NO Telegram API credentials' in gradle
+assert 'noEmbeddedKeysNetworkDc = telegramEnvironment ==' in gradle
+assert "endsWith('assemblenetworkdc')" in gradle
+assert 'requestTestDcApiCredentials()' in activity
+assert 'case "authorizationStateWaitRegistration": showTestRegistration(state); break;' in activity
+assert 'private void showTestRegistration(JSONObject authState)' in activity
+assert 'BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK' in activity
+assert 'registerUser' in activity
+assert 'BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK);' in activity
+transport=(ROOT/'app/src/main/java/org/vault/exporter/TdGateway.java').read_text()
+assert '"registerUser".equals(method) && !allowTestRegistration' in transport
+assert 'Test DC accepts only official 99966XYYYY test numbers' in transport
+assert 'setAuthenticationPhoneNumber' in transport
+assert '99966XYYYY (X=1–3)' in activity
+
+assert 'this(callback, false)' in transport
+assert 'new TdGateway(this::onTdEvent,' in activity
+assert 'disable_notification",true' in activity
+
+assert 'testApiHash = null;' in activity
+assert 'testApiId = 0;' in activity
+assert 'case "authorizationStateReady":\n          // An existing TDLib session' in activity
+assert 'clearPendingTestApiCredentials();\n          showStatus("Подключено напрямую к Telegram.' in activity
+assert 'Test DC forbids personal 2FA and email authentication' in transport
+for name in ('checkAuthenticationPassword', 'setAuthenticationEmailAddress', 'checkAuthenticationEmailCode'):
+    assert ('"'+name+'".equals(method)') in transport, 'Test transport missing disallow for '+name
+# API identifiers belong to the connection attempt, not to the Activity's lifetime.
+assert 'private void clearPendingTestApiCredentials()' in activity
+assert 'if (td != null) {' in activity and 'Сеанс Telegram уже запущен' in activity
+assert 'setNegativeButton("Отмена",(dialog,which)->clearPendingTestApiCredentials())' in activity
+assert 'setOnCancelListener(dialog->clearPendingTestApiCredentials())' in activity
+assert 'id.getText().clear();' in activity and 'hash.getText().clear();' in activity
+assert 'clearPendingTestApiCredentials();\n    if(td!=null) td.stop();' in activity
+# A shared Test DC account may be occupied or require a stranger's email/2FA.
+# Never prompt for real-life 2FA passwords, email addresses or mailbox codes.
+for state in ("authorizationStateWaitPassword", "authorizationStateWaitEmailAddress", "authorizationStateWaitEmailCode"):
+    assert ('case "'+state+'":\n          if(BuildConfig.ALLOW_TEST_DC_NETWORK)') in activity, 'Unsafe shared test account credential prompt: '+state
+assert 'ОСТАНОВИСЬ: публичный тестовый номер запросил пароль 2FA' in activity
+assert 'ОСТАНОВИСЬ: для общедоступного тестового номера нужен email' in activity
+print('PASS: developer API credentials released on cancellation/destroy; shared Test DC cannot solicit real 2FA/email')
+assert 'BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiId : BuildConfig.TELEGRAM_API_ID' in activity
+assert 'BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiHash : BuildConfig.TELEGRAM_API_HASH' in activity
+assert 'new_verbosity_level' in (ROOT/'app/src/main/cpp/vaultbridge.cpp').read_text()
+assert 'logStreamEmpty' in (ROOT/'app/src/main/cpp/vaultbridge.cpp').read_text()
+assert 'Missing developer Telegram API credentials' in gradle
+print('PASS: zero-secret offline and runtime-credential network QA builds')
+
+assert "networkDc {" in gradle and "applicationIdSuffix '.networktest'" in gradle
+assert "buildConfigField 'boolean', 'ALLOW_TEST_DC_NETWORK', 'false'" in gradle
+assert "buildConfigField 'boolean', 'ALLOW_TEST_DC_NETWORK', 'true'" in gradle
+assert "buildConfigField 'boolean', 'TELEGRAM_TEST_DC', 'true'" in gradle
+assert "buildConfigField 'boolean', 'ALLOW_PRODUCTION', 'false'" in gradle
+assert "sandboxDc/networkDc APK must always use telegramEnvironment=test" in gradle
+assert 'uses-permission android:name="android.permission.INTERNET"' in manifest_main
+for manifest in (manifest_debug, manifest_sandbox):
+    assert 'tools:node="remove"' in manifest
+assert not (ROOT/'app/src/networkDc/AndroidManifest.xml').exists(), 'Test network manifest must inherit approved main INTERNET only'
+assert 'BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK' in activity
+assert 'BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK' in activity
+assert 'private void beginConnect()' in activity
+assert '.put("use_test_dc",BuildConfig.TELEGRAM_TEST_DC)' in activity
+assert 'if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)' in activity
+assert 'button("Подключить тестовый Telegram (отдельный аккаунт)", this::askBeforeConnect);' in activity
+assert "TEST_DC_PACKAGE = 'org.vault.exporter.sandbox.networktest'" in (ROOT/'scripts/verify_offline_apk.py').read_text()
+assert "parser.add_argument('--network-test'" in (ROOT/'scripts/verify_offline_apk.py').read_text()
+print('PASS: isolated opt-in test-DC network build; offline variants remain disconnected')
+
+# Pinned native build recipe must use current supported OpenSSL, not old 1.1.1.
+native_script=(ROOT/'scripts/build_official_tdlib_android.sh').read_text()
+assert 'https://github.com/tdlib/td.git' in native_script
+assert 'ea3f69ce11aef458bfbb09869b809ede4447486f' in native_script
+assert '0f00a668585883a403ffe3c63f2567d25af72d49' in native_script
+assert 'OPENSSL_VERSION=openssl-3.5.9' in native_script
+assert 'ANDROID_NDK_VERSION=26.3.11579264' in native_script
+assert 'TDLIB_INTERFACE=JSON' in native_script
+assert 'verify_tdlib_elf.py' in native_script
+assert 'GITHUB_ACTIONS:-' in native_script
+assert 'docker build' in native_script and 'git -C "$WORK/source" fetch' in native_script
+assert 'app/src/main/jniLibs/**/*.so' in (ROOT/'.gitignore').read_text()
+subprocess.run(['bash','-n',str(ROOT/'scripts/build_official_tdlib_android.sh')],check=True)
+mega_source=(ROOT/'app/src/main/java/org/vault/exporter/MegaMockTdlib.java').read_text()
+mega_verify=(ROOT/'app/src/main/java/org/vault/exporter/MegaArchiveVerifier.java').read_text()
+mega_runner=(ROOT/'integration-jvm/RUN_MEGA_JVM.sh').read_text()
+assert 'ARCHIVED_WORDS=TOTAL_WORDS-8*WORDS_PER_MESSAGE' in mega_source
+assert 'words!=MegaMockTdlib.ARCHIVED_WORDS' in mega_verify
+assert '1 079 840' in activity and '1 080 000' not in activity
+assert 'Vault_MEGA_1079840_WORDS.tva' in activity
+assert 'Vault_MEGA_1079840_WORDS.tva' in (ROOT/'ci/mega-mixed-media-apk-smoke.sh').read_text()
+assert '-Xmx96m' in mega_runner and 'TestMillionWordsStress' in mega_runner
+print('PASS: exact archived million-word count, host stress runner and Android filename contract')
+print('PASS: pinned TDLib/OpenSSL arm64 builder recipe and local-only installation contract')

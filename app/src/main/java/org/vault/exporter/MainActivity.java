@@ -19,13 +19,16 @@ import java.util.concurrent.*;
 /** A minimal native Android UI. No browser server, Termux, commands or analytics. */
 public final class MainActivity extends Activity {
   private final ExecutorService worker = Executors.newSingleThreadExecutor();
-  private TdGateway td;
+  private volatile TdGateway td;
   private LinearLayout root, interactive;
   private TextView status, selected;
   private long selectedChatId = 0;
   private String selectedChatTitle = "Чат";
   private boolean exporting = false;
   private volatile boolean logoutRequested = false;
+  // Network QA only. Entered on the phone; never written to the APK, disk or saved state.
+  private volatile int testApiId = 0;
+  private volatile String testApiHash = null;
   private final java.util.concurrent.atomic.AtomicBoolean initializing = new java.util.concurrent.atomic.AtomicBoolean(false);
   private final java.util.concurrent.atomic.AtomicBoolean nativeProbeRunning = new java.util.concurrent.atomic.AtomicBoolean(false);
   private final int CREATE_ARCHIVE = 718;
@@ -69,6 +72,10 @@ public final class MainActivity extends Activity {
     } else {
       message("ВНИМАНИЕ: эта сборка подключается к настоящему Telegram. Риск ограничений стороннего API-клиента нельзя исключить.");
     }
+    // The offline/no-login guarantee must be visible ABOVE the action buttons,
+    // including on smaller screens. It must not be hidden beneath stress tests.
+    if (BuildConfig.DEBUG && BuildConfig.TELEGRAM_TEST_DC)
+      message("СТРОГО ОФЛАЙН-ДЕМО: доступ к Интернету заблокирован разрешениями Android. Вход в Telegram отключён.");
     if(BuildConfig.TELEGRAM_TEST_DC)
       button("Попробовать без аккаунта: скачать учебный чат",this::requestSyntheticExport);
     if(BuildConfig.TELEGRAM_TEST_DC)
@@ -80,12 +87,15 @@ public final class MainActivity extends Activity {
       button("Создать проверочный архив .tva (офлайн)", this::requestOfflineFixture);
     if (BuildConfig.DEBUG && BuildConfig.TELEGRAM_TEST_DC)
       button("Проверить нативную TDLib (офлайн)", this::probeNativeTdlibOffline);
-    if (BuildConfig.TELEGRAM_TEST_DC) {
+    if (BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK) {
+      message("Только тестовые серверы Telegram. Потребуется отдельная тестовая учётная запись. Обычные чаты недоступны.");
+      button("Подключить тестовый Telegram (отдельный аккаунт)", this::askBeforeConnect);
+    } else if (BuildConfig.TELEGRAM_TEST_DC) {
       message("В учебной версии вход в Telegram отключён. Интернет не требуется: нажми кнопку учебного чата.");
     } else if (!BuildConfig.DEBUG) {
       button("Подключить настоящий Telegram", this::askBeforeConnect);
     } else {
-      message("СТРОГО ОФЛАЙН-ДЕМО: доступ к Интернету заблокирован разрешениями Android. Вход в Telegram отключён.");
+      // The mandatory offline notice is already at the top of the screen.
     }
     message("Экспорт не запускается автоматически. Не требуется удалять или отключать основной Telegram.");
   }
@@ -221,7 +231,7 @@ public final class MainActivity extends Activity {
       return;
     }
     new AlertDialog.Builder(this).setTitle("Миллион слов и разные вложения")
-      .setMessage("54 000 вымышленных сообщений, ровно 1 080 000 слов и 19 вложений разных типов общей величиной 24 МиБ.\n\n"
+      .setMessage("54 000 вымышленных сообщений, ровно 1 079 840 слов и 19 вложений разных типов общей величиной 24 МиБ.\n\n"
         +"Экспорт происходит пакетами, файлы шифруются на телефоне. Итог — защищённый .tva, а не ZIP.\n\n"
         +"Учебные кружки, Opus-голосовые, WebP и TGS-стикеры, видео, фото и файлы. Все данные вымышленные; интернет не нужен. "
         +"Потребуется несколько минут, дополнительное свободное место и заряд аккумулятора. "
@@ -232,7 +242,7 @@ public final class MainActivity extends Activity {
         Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("application/octet-stream");
-        intent.putExtra(Intent.EXTRA_TITLE,"Vault_MEGA_1080000_WORDS.tva");
+        intent.putExtra(Intent.EXTRA_TITLE,"Vault_MEGA_1079840_WORDS.tva");
         try {startActivityForResult(intent,CREATE_MEGA_EXPORT);}
         catch(RuntimeException e){exporting=false;showStatus("Сохранение недоступно. Повтори попытку.");}
       }).show();
@@ -252,7 +262,7 @@ public final class MainActivity extends Activity {
       return;
     }
     clearUi();
-    message("Создаём 1 080 000 вымышленных слов и 24 МиБ файлов. Данные шифруются пакетами. "
+    message("Создаём 1 079 840 вымышленных слов и 24 МиБ файлов. Данные шифруются пакетами. "
       +"Вход в Telegram не выполняется. Держи приложение открытым.");
     showStatus("Миллион слов: начинаем…");
     worker.execute(()->{
@@ -298,12 +308,12 @@ public final class MainActivity extends Activity {
           }
         }finally{if(secret!=null)Arrays.fill(secret,(byte)0);}
         final boolean clean=progressErased;
-        showStatus("Успех: 1 080 000 слов и 19 учебных медиафайлов сохранены и проверены.");
+        showStatus("Успех: 1 079 840 слов и 19 учебных медиафайлов сохранены и проверены.");
         runOnUiThread(()->{
           if(isFinishing() || isDestroyed())return;
           clearUi();
           message("Готово! Защищённый .tva записан в выбранную папку. "
-            +"54 000 сообщений, 1 080 000 слов, 19 медиафайлов (24 МиБ)."
+            +"54 000 сообщений, 1 079 840 слов, 19 медиафайлов (24 МиБ)."
             +(clean?"":" Внимание: временный зашифрованный прогресс ещё не очищен."));
           message("Пароль: Vault-mega-offline-2026. В архиве только вымышленные данные.");
           button("На главный экран",this::showWelcome);
@@ -572,9 +582,23 @@ public final class MainActivity extends Activity {
       dialog.setMessage("Не удалось начать офлайн-проверку. Перезапусти приложение.");
     }
   }
+  // Credentials only live during a user-approved Test DC connection attempt.
+  // In particular, do not retain an API hash after the user cancels consent.
+  private void clearPendingTestApiCredentials() {
+    testApiId = 0;
+    testApiHash = null;
+  }
   private void askBeforeConnect() {
-    if(BuildConfig.TELEGRAM_TEST_DC){
-      showStatus("Учебная сборка не подключается к Telegram. Используй вымышленный чат.");
+    if (td != null) {
+      showStatus("Сеанс Telegram уже запущен. Заверши его перед новым подключением.");
+      return;
+    }
+    if (BuildConfig.ALLOW_TEST_DC_NETWORK && (testApiId <= 0 || testApiHash == null)) {
+      requestTestDcApiCredentials();
+      return;
+    }
+    if(BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK){
+      showStatus("Офлайн-сборка не подключается к Telegram. Используй вымышленный чат.");
       return;
     }
     if (BuildConfig.DEBUG) { showStatus("В демонстрационной сборке доступ к Telegram отключён."); return; }
@@ -583,32 +607,109 @@ public final class MainActivity extends Activity {
       showStatus("Подключение к основному Telegram запрещено конфигурацией этой сборки.");
       return;
     }
-    if (BuildConfig.TELEGRAM_API_ID <= 0 || BuildConfig.TELEGRAM_API_HASH.isEmpty()) {
-      showStatus("Для сетевого теста разработчик должен настроить Telegram API. Офлайн-демонстрация доступна без ключей.");
+    if (BuildConfig.ALLOW_TEST_DC_NETWORK ? (testApiId <= 0 || testApiHash == null)
+        : (BuildConfig.TELEGRAM_API_ID <= 0 || BuildConfig.TELEGRAM_API_HASH.isEmpty())) {
+      showStatus("Для подключения нужны собственные Telegram API ID и Hash.");
       return;
     }
     String notice = BuildConfig.TELEGRAM_TEST_DC
       ? "Будут использованы только тестовые серверы Telegram. Не вводите здесь информацию о настоящих переписках. Тестовый вход может быть недоступен."
       : "Это НЕОФИЦИАЛЬНЫЙ клиент. Telegram предупреждает о дополнительной проверке таких клиентов. Нулевой риск для аккаунта гарантировать нельзя. Не подключайте важный аккаунт, если не готовы принять этот риск.";
     new AlertDialog.Builder(this).setTitle("Подтвердить подключение")
-      .setMessage(notice).setNegativeButton("Отмена",null)
+      .setMessage(notice).setNegativeButton("Отмена",(dialog,which)->clearPendingTestApiCredentials())
+      .setOnCancelListener(dialog->clearPendingTestApiCredentials())
       .setPositiveButton(BuildConfig.TELEGRAM_TEST_DC ? "Только тестовый сервер" : "Понимаю риск, подключить",
         (d, which) -> beginConnect()).show();
   }
+  private void requestTestDcApiCredentials() {
+    if (!BuildConfig.TELEGRAM_TEST_DC || !BuildConfig.ALLOW_TEST_DC_NETWORK || td != null) return;
+    LinearLayout fields = new LinearLayout(this);
+    fields.setOrientation(LinearLayout.VERTICAL);
+    fields.setPadding(dp(20), 0, dp(20), 0);
+    EditText id = new EditText(this), hash = new EditText(this);
+    id.setHint("API ID из my.telegram.org/apps");
+    id.setInputType(InputType.TYPE_CLASS_NUMBER);
+    id.setSingleLine(true);
+    hash.setHint("API Hash (32 символа)");
+    hash.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+    hash.setSingleLine(true);
+    for (EditText input : new EditText[]{id, hash}) {
+      input.setTextColor(WHITE);
+      input.setHintTextColor(MUTED);
+      fields.addView(input);
+    }
+    new AlertDialog.Builder(this).setTitle("Данные своего Telegram API")
+      .setMessage("Только тестовый Telegram. Используй собственные API ID и Hash, не отправляй их в чат или GitHub. Здесь они не сохраняются.")
+      .setView(fields)
+      .setNegativeButton("Отмена", (dialog,which)->{
+        id.getText().clear();
+        hash.getText().clear();
+        clearPendingTestApiCredentials();
+      })
+      .setOnCancelListener(dialog->{
+        id.getText().clear();
+        hash.getText().clear();
+        clearPendingTestApiCredentials();
+      })
+      .setPositiveButton("Продолжить", (d, which) -> {
+        String idText = id.getText().toString().trim();
+        String hashText = hash.getText().toString().trim();
+        id.getText().clear();
+        hash.getText().clear();
+        int parsedId = 0;
+        try { parsedId = Integer.parseInt(idText); }
+        catch (NumberFormatException ignored) {}
+        if (parsedId <= 0 || !hashText.matches("[a-fA-F0-9]{32}")) {
+          showStatus("Неверные API ID или Hash. Получи свои на my.telegram.org/apps и повтори ввод.");
+          return;
+        }
+        testApiId = parsedId;
+        testApiHash = hashText;
+        askBeforeConnect();
+      }).show();
+  }
+  private void closeFailedTdlibSession() {
+    // Called only from the serialized worker; do not log Telegram data.
+    TdGateway failed=td;
+    td=null;
+    initializing.set(false);
+    clearPendingTestApiCredentials();
+    if(failed!=null) {
+      try {failed.stop();}catch(RuntimeException ignored) {
+        // Never re-enable authentication using a potentially stale gateway.
+      }
+    }
+  }
+
   private void beginConnect() {
-    if (BuildConfig.DEBUG) { showStatus("В демонстрационной сборке подключение запрещено."); return; }
+    if (BuildConfig.ALLOW_TEST_DC_NETWORK && (testApiId <= 0 || testApiHash == null)) {
+      showStatus("Сначала введи свои API ID и Hash для тестового Telegram.");
+      return;
+    }
+    if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)
+        || (!BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_PRODUCTION)) {
+      showStatus("Сетевое подключение заблокировано конфигурацией сборки.");
+      return;
+    }
     clearUi(); message("Соединяемся с " + (BuildConfig.TELEGRAM_TEST_DC ? "тестовым Telegram" : "основным Telegram") + "…");
     showStatus("Инициализация TDLib по вашему запросу…");
     worker.execute(() -> {
       try {
         // Do not materialize the Keystore-wrapped TDLib secret as a long-lived
         // immutable String before TDLib actually requests its parameters.
-        td = new TdGateway(this::onTdEvent);
+        td = new TdGateway(this::onTdEvent,
+          BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK);
         JSONObject stateObj = td.await(TdGateway.cmd("getAuthorizationState"),30);
         onAuthorizationState(stateObj);
       } catch(Throwable e) {
-        showStatus("Ошибка TDLib: " + e.getClass().getSimpleName() + ". Сеанс не подтверждён.");
-        runOnUiThread(() -> {clearUi(); button("Вернуться", this::showWelcome);});
+        closeFailedTdlibSession();
+        showStatus("Ошибка TDLib: " + e.getClass().getSimpleName() + ". Неуспешный сеанс закрыт.");
+        runOnUiThread(() -> {
+          if (!isFinishing() && !isDestroyed()) {
+            clearUi();
+            button("Вернуться", this::showWelcome);
+          }
+        });
       }
     });
   }
@@ -644,6 +745,10 @@ public final class MainActivity extends Activity {
         try {
           byte[] secret = new SessionSecrets(this).getOrCreate();
           try {
+          int apiId = BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiId : BuildConfig.TELEGRAM_API_ID;
+          String apiHash = BuildConfig.ALLOW_TEST_DC_NETWORK ? testApiHash : BuildConfig.TELEGRAM_API_HASH;
+          if (apiId <= 0 || apiHash == null || !apiHash.matches("[a-fA-F0-9]{32}"))
+            throw new SecurityException("Нет локальных API данных для TDLib");
           JSONObject params=TdGateway.cmd("setTdlibParameters")
             .put("use_test_dc",BuildConfig.TELEGRAM_TEST_DC)
             .put("database_directory",new File(getFilesDir(),"tdlib/database").getAbsolutePath())
@@ -651,13 +756,30 @@ public final class MainActivity extends Activity {
             .put("database_encryption_key",Base64.encodeToString(secret,Base64.NO_WRAP))
             .put("use_file_database",true).put("use_chat_info_database",true)
             .put("use_message_database",true).put("use_secret_chats",false)
-            .put("api_id",BuildConfig.TELEGRAM_API_ID).put("api_hash",BuildConfig.TELEGRAM_API_HASH)
+            .put("api_id",apiId).put("api_hash",apiHash)
             .put("system_language_code",Locale.getDefault().getLanguage())
             .put("device_model",android.os.Build.MODEL).put("system_version",android.os.Build.VERSION.RELEASE)
             .put("application_version","0.9-test-gated-alpha");
           td.await(params,30);
+          // Keep no developer API hash in Activity memory after TDLib has accepted it.
+          if (BuildConfig.ALLOW_TEST_DC_NETWORK) {
+            testApiHash = null;
+            testApiId = 0;
+          }
           } finally {Arrays.fill(secret,(byte)0);}
-        } catch(Exception e) { initializing.set(false); showStatus("Не удалось настроить TDLib: " + e.getMessage()); }
+        } catch(Exception e) {
+          // Parameter rejection can leave a live native client that makes all
+          // subsequent Connect taps report "already connected".
+          // Fail closed: stop its event pump and allow a clean retry.
+          closeFailedTdlibSession();
+          showStatus("Не удалось настроить TDLib. Сеанс закрыт, можно повторить вход.");
+          runOnUiThread(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+              clearUi();
+              button("Повторить подключение", this::showWelcome);
+            }
+          });
+        }
       });
       return;
     }
@@ -665,17 +787,40 @@ public final class MainActivity extends Activity {
       if (exporting) return;
       clearUi();
       switch(name) {
-        case "authorizationStateWaitPhoneNumber": authInput("Номер телефона в международном формате", "Номер +…", false, "Продолжить",
+        case "authorizationStateWaitPhoneNumber": authInput(
+            BuildConfig.ALLOW_TEST_DC_NETWORK
+              ? "ТОЛЬКО общедоступный тестовый номер 99966XYYYY (X=1–3). Основной номер вводить ЗАПРЕЩЕНО."
+              : "Номер телефона в международном формате",
+            BuildConfig.ALLOW_TEST_DC_NETWORK ? "+99966XYYYY" : "Номер +…", false, "Продолжить",
             value -> TdGateway.cmd("setAuthenticationPhoneNumber").put("phone_number", value)); break;
         case "authorizationStateWaitCode": authInput("Код подтверждения из Telegram", "Код", false, "Подтвердить",
             value -> TdGateway.cmd("checkAuthenticationCode").put("code", value)); break;
-        case "authorizationStateWaitPassword": authInput("Пароль двухэтапной аутентификации", "Пароль", true, "Подтвердить",
-            value -> TdGateway.cmd("checkAuthenticationPassword").put("password",value)); break;
-        case "authorizationStateWaitEmailAddress": authInput("Email, запрошенный Telegram", "Электронная почта", false, "Отправить код",
-            value -> TdGateway.cmd("setAuthenticationEmailAddress").put("email_address",value)); break;
-        case "authorizationStateWaitEmailCode": authInput("Код подтверждения электронной почты", "Код",false,"Подтвердить",
-            value -> TdGateway.cmd("checkAuthenticationEmailCode").put("code",TdGateway.cmd("emailAddressAuthenticationCode").put("code",value))); break;
-        case "authorizationStateReady": showStatus("Подключено напрямую к Telegram. Выбери переписку."); showReady(); break;
+        case "authorizationStateWaitPassword":
+          if(BuildConfig.ALLOW_TEST_DC_NETWORK)
+            message("ОСТАНОВИСЬ: публичный тестовый номер запросил пароль 2FA. Не вводи пароль личного Telegram. Выбери другой безопасный тестовый сценарий.");
+          else authInput("Пароль двухэтапной аутентификации", "Пароль", true, "Подтвердить",
+            value -> TdGateway.cmd("checkAuthenticationPassword").put("password",value));
+          break;
+        case "authorizationStateWaitEmailAddress":
+          if(BuildConfig.ALLOW_TEST_DC_NETWORK)
+            message("ОСТАНОВИСЬ: для общедоступного тестового номера нужен email. Настоящую почту не вводи.");
+          else authInput("Email, запрошенный Telegram", "Электронная почта", false, "Отправить код",
+            value -> TdGateway.cmd("setAuthenticationEmailAddress").put("email_address",value));
+          break;
+        case "authorizationStateWaitEmailCode":
+          if(BuildConfig.ALLOW_TEST_DC_NETWORK)
+            message("ОСТАНОВИСЬ: вход потребовал код электронной почты. Не используй личный email.");
+          else authInput("Код подтверждения электронной почты", "Код",false,"Подтвердить",
+            value -> TdGateway.cmd("checkAuthenticationEmailCode").put("code",TdGateway.cmd("emailAddressAuthenticationCode").put("code",value)));
+          break;
+        case "authorizationStateWaitRegistration": showTestRegistration(state); break;
+        case "authorizationStateReady":
+          // An existing TDLib session can skip WaitTdlibParameters entirely.
+          // Do not keep the API Hash supplied at the new Connect prompt in memory.
+          clearPendingTestApiCredentials();
+          showStatus("Подключено напрямую к Telegram. Выбери переписку.");
+          showReady();
+          break;
         case "authorizationStateLoggingOut": showStatus("Завершаем только сеанс экспортёра…"); break;
         case "authorizationStateClosed":
           // Never erase the resumable archive here: a network-confirmed logout result
@@ -684,6 +829,56 @@ public final class MainActivity extends Activity {
           break;
         default: message("Telegram запросил дополнительный способ входа: "+name+". Пока этот этап не поддержан.");
       }
+    });
+  }
+  // Telegram can require explicit registration even for a brand-new test number.
+  // NEVER sign up on production, never silently accept Telegram's terms and
+  // never register automatically on merely entering a confirmation code.
+  private void showTestRegistration(JSONObject authState) {
+    if (!BuildConfig.TELEGRAM_TEST_DC || !BuildConfig.ALLOW_TEST_DC_NETWORK) {
+      message("Регистрация запрещена в этой сборке.");
+      return;
+    }
+    message("Telegram запросил регистрацию НОВОГО тестового аккаунта.");
+    message("Тестовые номера могут быть общедоступными: не используй настоящие имя, переписки или персональные сведения.");
+    button("Прочитать условия и создать тестовый профиль", () -> {
+      JSONObject terms=authState.optJSONObject("terms_of_service");
+      JSONObject formatted=terms==null ? null : terms.optJSONObject("text");
+      String received=formatted==null ? "" : formatted.optString("text","");
+      String termsText=received.length()>2800 ? received.substring(0,2800)+"…" : received;
+      String notice="Только тестовые серверы Telegram. Учётная запись может быть общедоступной. "+
+        "Создание профиля означает согласие с действующими условиями Telegram (telegram.org/tos). "+
+        "Проверь условия перед продолжением."+
+        (termsText.isEmpty() ? "" : "\n\nУсловия, полученные от Telegram:\n"+termsText);
+      new AlertDialog.Builder(this).setTitle("Регистрация в тестовом Telegram")
+        .setMessage(notice).setNegativeButton("Отмена",null)
+        .setPositiveButton("Прочитал(а), перейти к имени", (d,w) -> {
+          final EditText name=new EditText(this);
+          name.setSingleLine(true);
+          name.setText("Test");
+          name.setHint("Вымышленное имя (1–64 символа)");
+          new AlertDialog.Builder(this).setTitle("Только вымышленный тестовый профиль")
+            .setMessage("Будет создан новый профиль ТОЛЬКО на Telegram Test DC. Настоящие персональные данные не вводи.")
+            .setView(name).setNegativeButton("Отмена",null)
+            .setPositiveButton("Зарегистрировать тестовый профиль",(dialog,which)-> {
+              String first=name.getText().toString().trim();
+              name.getText().clear();
+              if (first.isEmpty() || first.length()>64) {
+                showStatus("Имя должно содержать от 1 до 64 символов.");
+                return;
+              }
+              showStatus("Подтверждаем регистрацию тестового профиля…");
+              worker.execute(() -> {
+                try {
+                  if (td==null)throw new IllegalStateException("Клиент закрыт");
+                  td.await(TdGateway.cmd("registerUser").put("first_name",first)
+                      .put("last_name","").put("disable_notification",true),45);
+                }catch(Exception e){
+                  showStatus("Регистрация на тестовом сервере не удалась. Не повторяй попытки много раз подряд.");
+                }
+              });
+            }).show();
+        }).show();
     });
   }
   @FunctionalInterface private interface AuthCommand { JSONObject create(String value) throws Exception; }
@@ -1008,6 +1203,7 @@ public final class MainActivity extends Activity {
     // Abandoning the picker must not retain the vault password in the Activity.
     if(pendingPassphrase!=null){Arrays.fill(pendingPassphrase,'\0');pendingPassphrase=null;}
     pendingChatId=0;
+    clearPendingTestApiCredentials();
     if(td!=null) td.stop();
     worker.shutdownNow();
     super.onDestroy();

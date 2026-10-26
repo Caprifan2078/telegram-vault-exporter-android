@@ -2,19 +2,36 @@ package org.vault.exporter;
 
 import org.json.JSONObject;
 import java.util.concurrent.*;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class TdGateway {
+  // Read-only export API surface: auth and local cache cleanup are the only
+  // intentional side-effecting exceptions. No message/chat mutations.
+  private static final Set<String> ALLOWED_REQUESTS = java.util.Collections.unmodifiableSet(
+      new java.util.HashSet<>(java.util.Arrays.asList(
+    "getAuthorizationState", "setTdlibParameters", "setAuthenticationPhoneNumber",
+    "setAuthenticationEmailAddress", "checkAuthenticationEmailCode",
+    "checkAuthenticationCode", "checkAuthenticationPassword", "logOut",
+    "getChats", "loadChats", "getChat", "getChatHistory", "getUser",
+    "downloadFile", "cancelDownloadFile", "deleteFile", "getFile", "registerUser"
+      )));
   public interface Listener { void onUpdate(JSONObject event); }
   private final long client;
   private final ConcurrentHashMap<String, CompletableFuture<JSONObject>> pending = new ConcurrentHashMap<>();
   private final AtomicLong sequence = new AtomicLong();
   private final Listener listener;
+  // Registration is deliberately unavailable in production and offline clients.
+  private final boolean allowTestRegistration;
   private final Thread reader;
   private volatile boolean running = true;
 
-  public TdGateway(Listener callback) {
+  public TdGateway(Listener callback) { this(callback, false); }
+  public TdGateway(Listener callback, boolean allowTestRegistration) {
     this.listener = callback;
+    this.allowTestRegistration = allowTestRegistration;
+    if (!TdNative.disableSensitiveLogging())
+      throw new IllegalStateException("Не удалось отключить журналы TDLib: сетевое подключение запрещено");
     client = TdNative.createClient();
     if (client == 0) throw new IllegalStateException("TDLib не включена в APK: нет официальной libtdjson.so");
     reader = new Thread(() -> {
@@ -38,6 +55,24 @@ public final class TdGateway {
   }
   public CompletableFuture<JSONObject> call(JSONObject request) {
     if(!running)throw new IllegalStateException("TDLib client is closed");
+    // Never log private request data. Reject unknown/write commands before JNI.
+    String method = request == null ? "" : request.optString("@type", "");
+    if (!ALLOWED_REQUESTS.contains(method) || ("registerUser".equals(method) && !allowTestRegistration))
+      throw new SecurityException("Unauthorized Telegram RPC blocked by read-only export policy");
+    // Telegram Test DC numbers are shared/public. A stranger may have enabled
+    // email or 2FA on that test identity. Reject these methods below the UI,
+    // before they can reach TDLib's native transport. No real credentials ever.
+    if (allowTestRegistration && ("checkAuthenticationPassword".equals(method)
+        || "setAuthenticationEmailAddress".equals(method)
+        || "checkAuthenticationEmailCode".equals(method)))
+      throw new SecurityException("Test DC forbids personal 2FA and email authentication");
+    // Fail-closed: this QA APK must NEVER submit the owner's real phone number,
+    // even to a test DC. Official shared test numbers are the only permitted ones.
+    if (allowTestRegistration && "setAuthenticationPhoneNumber".equals(method)) {
+      String phone=request.optString("phone_number","");
+      if (!phone.matches("\\+?99966[1-3][0-9]{4}"))
+        throw new SecurityException("Test DC accepts only official 99966XYYYY test numbers");
+    }
     String id = Long.toString(sequence.incrementAndGet());
     CompletableFuture<JSONObject> result = new CompletableFuture<>();
     pending.put(id, result);

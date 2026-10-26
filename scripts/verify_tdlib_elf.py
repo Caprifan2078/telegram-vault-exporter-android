@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 import subprocess
 
-REQUIRED = {'td_create_client_id', 'td_send', 'td_receive'}
+REQUIRED = {'td_create_client_id', 'td_send', 'td_receive', 'td_execute'}
 DANGEROUS_DYNAMIC = {'libcrypto.so', 'libssl.so', 'libc++_shared.so'}
 
 

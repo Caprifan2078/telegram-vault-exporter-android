@@ -9,7 +9,8 @@ import java.io.IOException;
 import java.util.Random;
 
 /** Purely fictional, lazy, OFFLINE load simulator for the SAME ExportEngine.
- * Exactly 54,000 messages x 20 generated words = 1,080,000 words.
+ * 54,000 messages generate 1,080,000 words, but 8 TDLib media-only
+ * types cannot carry captions: exactly 1,079,840 text words are archived.
  * 18 mixed real-format media plus one extra link-preview album item. Two 12-MiB binary documents.
  * No Telegram account, network, SDK keys or background server.
  */
@@ -18,6 +19,8 @@ public final class MegaMockTdlib implements ExportEngine.Transport {
   public static final int MESSAGE_COUNT=54000;
   public static final int WORDS_PER_MESSAGE=20;
   public static final int TOTAL_WORDS=MESSAGE_COUNT*WORDS_PER_MESSAGE;
+  /** Eight media-only messages cannot contain captions (two each of four types). */
+  public static final int ARCHIVED_WORDS=TOTAL_WORDS-8*WORDS_PER_MESSAGE;
   public static final int MEDIA_COUNT=19;
   public static final long TOTAL_MEDIA_BYTES=24L*1024*1024; // excludes tiny encoded image/audio/video fixtures
   private static final long START_ID=1900000000L;
@@ -212,7 +215,7 @@ public final class MegaMockTdlib implements ExportEngine.Transport {
       case "getChat":
         if(request.getLong("chat_id")!=CHAT_ID)throw new SecurityException("Invalid heavy test chat");
         return type("chat").put("id",CHAT_ID)
-          .put("title","СТРЕСС-ТЕСТ · 1 080 000 слов · голосовые, кружки, стикеры")
+          .put("title","СТРЕСС-ТЕСТ · 1 079 840 слов · голосовые, кружки, стикеры")
           .put("has_protected_content",false).put("type",type("chatTypePrivate"));
       case "getUser": {
         int id=request.getInt("user_id");

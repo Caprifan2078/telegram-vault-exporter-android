@@ -1,0 +1,134 @@
+name: Public offline + test-DC QA APKs (no embedded Telegram credentials)
+
+# QA milestone: verify hard native-transport denial of 2FA/email and clear cached API hash on restored sessions.
+# Only adding this workflow on the experimental branch triggers native compilation.
+# Unrelated source pushes never automatically retrigger this expensive job.
+on:
+  push:
+    branches:
+      - feat/isolated-testdc-android-build-20261026
+    paths:
+      - .github/workflows/build-offline-apk.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vault-android-offline-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-arm64-apk:
+    # Never consume paid GitHub-hosted minutes while private.
+    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || github.event_name == 'push') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout source without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.7 for Android Gradle Plugin 8.6.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+          cache-disabled: true
+      - name: Use preinstalled Android SDK (avoid obsolete SDK tools package)
+        run: |
+          test -n "${ANDROID_HOME:-}"
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' | sort -Vr | head -n1)"
+          fi
+          test -x "$SDKMANAGER"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          "$SDKMANAGER" --version
+      - name: Install Android platform, NDK and CMake
+        run: |
+          # The SDK repository occasionally returns truncated NDK ZIP files.
+          # Retry once after deleting ONLY the failed, untrusted NDK directory.
+          if ! "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;26.3.11579264'; then
+            echo 'SDK download/unzip failed; retrying clean pinned NDK installation once'
+            rm -rf "$ANDROID_HOME/ndk/26.3.11579264"
+            sleep 4
+            "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;26.3.11579264'
+          fi
+          test -d "$ANDROID_HOME/ndk/26.3.11579264"
+          test -f "$ANDROID_HOME/ndk/26.3.11579264/source.properties"
+      - name: Static source safeguards before compiling
+        run: |
+          python3 tests/RUN_BUILD_SAFETY_TESTS.py
+          python3 ci-contract/verify_ci_contract.py
+      - name: Native JNI and Telegram read-only transport safety
+        run: |
+          bash native-host-test/RUN_NATIVE_HOST_TEST.sh
+          bash transport-jvm/RUN_TRANSPORT_JVM.sh
+      - name: Million-word high-entropy real exporter stress with offline fault injection
+        run: |
+          bash integration-jvm/RUN_MEGA_JVM.sh
+      # Cache ONLY the locally verified public-source native output from this
+      # dedicated branch so repeated Android/Gradle fixes don't waste >20 minutes.
+      - name: Restore verified TDLib binary cache
+        id: tdlib-binary-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libtdjson.so
+            build/tdlib-provenance/verified-build.json
+          key: vault-tdlib-arm64-ea3f69ce-openssl359-ndk263-v1-${{ hashFiles('scripts/build_official_tdlib_android.sh', 'scripts/prepare_tdlib_android.py') }}
+      - name: Compile pinned official TDLib arm64
+        if: steps.tdlib-binary-cache.outputs.cache-hit != 'true'
+        env:
+          VAULT_ALLOW_PUBLIC_CI_TDLIB_BUILD: '1'
+          VAULT_PUBLIC_REPOSITORY_CONFIRMED: ${{ github.event.repository.private == false }}
+        run: bash scripts/build_official_tdlib_android.sh
+      - name: Reverify actual native binary before packaging
+        run: |
+          python3 scripts/verify_tdlib_elf.py app/src/main/jniLibs/arm64-v8a/libtdjson.so
+          test -s build/tdlib-provenance/verified-build.json
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          native=pathlib.Path('app/src/main/jniLibs/arm64-v8a/libtdjson.so').read_bytes()
+          provenance=json.loads(pathlib.Path('build/tdlib-provenance/verified-build.json').read_text())
+          actual=hashlib.sha256(native).hexdigest()
+          assert actual==provenance['sha256'], 'Cached TDLib does not match verified provenance'
+          assert provenance['commit']=='ea3f69ce11aef458bfbb09869b809ede4447486f'
+          assert provenance['openssl']=='openssl-3.5.9'
+          print('PASS: native source provenance and binary SHA-256')
+          PY
+      - name: Assemble credential-free offline demo APK
+        run: |
+          gradle --no-daemon --stacktrace :app:assembleDebug -PtelegramEnvironment=test -PtelegramApiId=0 -PtelegramApiHash=
+      - name: Inspect compiled APK permissions and package
+        run: |
+          python3 scripts/verify_offline_apk.py app/build/outputs/apk/debug/app-debug.apk \
+            --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt"
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
+      - name: Publish ONLY the strictly offline demo APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: VaultExporter-offline-qa-arm64-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Assemble isolated TEST Telegram network APK without embedded keys
+        run: |
+          gradle --no-daemon --stacktrace :app:assembleNetworkDc -PtelegramEnvironment=test -PtelegramApiId=0 -PtelegramApiHash=
+      - name: Inspect real test-DC APK package and Android permissions
+        run: |
+          python3 scripts/verify_offline_apk.py app/build/outputs/apk/networkDc/app-networkDc.apk \
+            --network-test --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt"
+          sha256sum app/build/outputs/apk/networkDc/app-networkDc.apk
+      - name: Publish credential-free Telegram TEST DC QA APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: VaultExporter-Telegram-TestDC-arm64-apk
+          path: app/build/outputs/apk/networkDc/app-networkDc.apk
+          if-no-files-found: error
+          retention-days: 14
