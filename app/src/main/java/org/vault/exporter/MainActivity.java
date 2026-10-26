@@ -673,7 +673,8 @@ public final class MainActivity extends Activity {
       try {
         // Do not materialize the Keystore-wrapped TDLib secret as a long-lived
         // immutable String before TDLib actually requests its parameters.
-        td = new TdGateway(this::onTdEvent);
+        td = new TdGateway(this::onTdEvent,
+          BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK);
         JSONObject stateObj = td.await(TdGateway.cmd("getAuthorizationState"),30);
         onAuthorizationState(stateObj);
       } catch(Throwable e) {
@@ -772,6 +773,7 @@ public final class MainActivity extends Activity {
             value -> TdGateway.cmd("setAuthenticationEmailAddress").put("email_address",value)); break;
         case "authorizationStateWaitEmailCode": authInput("Код подтверждения электронной почты", "Код",false,"Подтвердить",
             value -> TdGateway.cmd("checkAuthenticationEmailCode").put("code",TdGateway.cmd("emailAddressAuthenticationCode").put("code",value))); break;
+        case "authorizationStateWaitRegistration": showTestRegistration(state); break;
         case "authorizationStateReady": showStatus("Подключено напрямую к Telegram. Выбери переписку."); showReady(); break;
         case "authorizationStateLoggingOut": showStatus("Завершаем только сеанс экспортёра…"); break;
         case "authorizationStateClosed":
@@ -781,6 +783,56 @@ public final class MainActivity extends Activity {
           break;
         default: message("Telegram запросил дополнительный способ входа: "+name+". Пока этот этап не поддержан.");
       }
+    });
+  }
+  // Telegram can require explicit registration even for a brand-new test number.
+  // NEVER sign up on production, never silently accept Telegram's terms and
+  // never register automatically on merely entering a confirmation code.
+  private void showTestRegistration(JSONObject authState) {
+    if (!BuildConfig.TELEGRAM_TEST_DC || !BuildConfig.ALLOW_TEST_DC_NETWORK) {
+      message("Регистрация запрещена в этой сборке.");
+      return;
+    }
+    message("Telegram запросил регистрацию НОВОГО тестового аккаунта.");
+    message("Тестовые номера могут быть общедоступными: не используй настоящие имя, переписки или персональные сведения.");
+    button("Прочитать условия и создать тестовый профиль", () -> {
+      JSONObject terms=authState.optJSONObject("terms_of_service");
+      JSONObject formatted=terms==null ? null : terms.optJSONObject("text");
+      String received=formatted==null ? "" : formatted.optString("text","");
+      String termsText=received.length()>2800 ? received.substring(0,2800)+"…" : received;
+      String notice="Только тестовые серверы Telegram. Учётная запись может быть общедоступной. "+
+        "Создание профиля означает согласие с действующими условиями Telegram (telegram.org/tos). "+
+        "Проверь условия перед продолжением."+
+        (termsText.isEmpty() ? "" : "\n\nУсловия, полученные от Telegram:\n"+termsText);
+      new AlertDialog.Builder(this).setTitle("Регистрация в тестовом Telegram")
+        .setMessage(notice).setNegativeButton("Отмена",null)
+        .setPositiveButton("Прочитал(а), перейти к имени", (d,w) -> {
+          final EditText name=new EditText(this);
+          name.setSingleLine(true);
+          name.setText("Test");
+          name.setHint("Вымышленное имя (1–64 символа)");
+          new AlertDialog.Builder(this).setTitle("Только вымышленный тестовый профиль")
+            .setMessage("Будет создан новый профиль ТОЛЬКО на Telegram Test DC. Настоящие персональные данные не вводи.")
+            .setView(name).setNegativeButton("Отмена",null)
+            .setPositiveButton("Зарегистрировать тестовый профиль",(dialog,which)-> {
+              String first=name.getText().toString().trim();
+              name.getText().clear();
+              if (first.isEmpty() || first.length()>64) {
+                showStatus("Имя должно содержать от 1 до 64 символов.");
+                return;
+              }
+              showStatus("Подтверждаем регистрацию тестового профиля…");
+              worker.execute(() -> {
+                try {
+                  if (td==null)throw new IllegalStateException("Клиент закрыт");
+                  td.await(TdGateway.cmd("registerUser").put("first_name",first)
+                      .put("last_name","").put("disable_notification",true),45);
+                }catch(Exception e){
+                  showStatus("Регистрация на тестовом сервере не удалась. Не повторяй попытки много раз подряд.");
+                }
+              });
+            }).show();
+        }).show();
     });
   }
   @FunctionalInterface private interface AuthCommand { JSONObject create(String value) throws Exception; }
