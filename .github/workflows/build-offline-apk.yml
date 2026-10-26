@@ -1,4 +1,4 @@
-name: Public offline APK build (no Telegram credentials)
+name: Public offline + test-DC QA APKs (no embedded Telegram credentials)
 
 # Only adding this workflow on the experimental branch triggers native compilation.
 # Unrelated source pushes never automatically retrigger this expensive job.
@@ -55,6 +55,10 @@ jobs:
         run: |
           python3 tests/RUN_BUILD_SAFETY_TESTS.py
           python3 ci-contract/verify_ci_contract.py
+      - name: Native JNI and Telegram read-only transport safety
+        run: |
+          bash native-host-test/RUN_NATIVE_HOST_TEST.sh
+          bash transport-jvm/RUN_TRANSPORT_JVM.sh
       # Cache ONLY the locally verified public-source native output from this
       # dedicated branch so repeated Android/Gradle fixes don't waste >20 minutes.
       - name: Restore verified TDLib binary cache
@@ -99,4 +103,19 @@ jobs:
           name: VaultExporter-offline-qa-arm64-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 14
+      - name: Assemble isolated TEST Telegram network APK without embedded keys
+        run: |
+          gradle --no-daemon --stacktrace :app:assembleNetworkDc -PtelegramEnvironment=test -PtelegramApiId=0 -PtelegramApiHash=
+      - name: Inspect real test-DC APK package and Android permissions
+        run: |
+          python3 scripts/verify_offline_apk.py app/build/outputs/apk/networkDc/app-networkDc.apk \
+            --network-test --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt"
+          sha256sum app/build/outputs/apk/networkDc/app-networkDc.apk
+      - name: Publish credential-free Telegram TEST DC QA APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: VaultExporter-Telegram-TestDC-arm64-apk
+          path: app/build/outputs/apk/networkDc/app-networkDc.apk
+          if-no-files-found: error
+          retention-days: 14
