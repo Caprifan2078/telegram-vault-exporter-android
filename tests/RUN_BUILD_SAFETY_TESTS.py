@@ -82,6 +82,20 @@ gradle=(ROOT/'app/build.gradle').read_text()
 manifest_main=(ROOT/'app/src/main/AndroidManifest.xml').read_text()
 manifest_debug=(ROOT/'app/src/debug/AndroidManifest.xml').read_text()
 manifest_sandbox=(ROOT/'app/src/sandboxDc/AndroidManifest.xml').read_text()
+# Regression: the network testDc refactor changed MainActivity's offline fence.
+# An old Gradle string check silently broke credential-free offline builds.
+assert "offlineDemoOnly = telegramEnvironment == 'test'" in gradle
+assert "endsWith('assembledebug')" in gradle
+assert "endsWith('assemblesandboxdc')" in gradle
+assert "tasksRequested.size() == 1" in gradle
+assert """offlineManifest.text.contains('tools:node="remove"')""" in gradle
+assert "activitySource.contains('BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK')" in gradle
+assert "activitySource.contains('if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)')" in gradle
+assert 'offlineSandboxOnly' not in gradle
+assert 'Offline APK must contain NO Telegram API credentials' in gradle
+assert 'Missing developer Telegram API credentials' in gradle
+print('PASS: zero-secret offline APK build gate; network APK requires developer credentials')
+
 assert "testDc {" in gradle and "applicationIdSuffix '.networktest'" in gradle
 assert "buildConfigField 'boolean', 'ALLOW_TEST_DC_NETWORK', 'false'" in gradle
 assert "buildConfigField 'boolean', 'ALLOW_TEST_DC_NETWORK', 'true'" in gradle
