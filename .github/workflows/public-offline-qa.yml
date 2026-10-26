@@ -32,6 +32,11 @@ jobs:
           java-version: '17'
       - name: Crypto, archive, resume, manifest and offline safety tests
         run: bash tests/RUN_TESTS_OFFLINE.sh
+      - name: Export engine, mock TDLib lifecycle and JNI host regressions
+        run: |
+          bash integration-jvm/RUN_INTEGRATION_JVM.sh
+          bash transport-jvm/RUN_TRANSPORT_JVM.sh
+          bash native-host-test/RUN_NATIVE_HOST_TEST.sh
       - name: CI contract and build safety checks
         run: |
           python3 ci-contract/verify_ci_contract.py
