@@ -80,7 +80,10 @@ public final class MainActivity extends Activity {
       button("Создать проверочный архив .tva (офлайн)", this::requestOfflineFixture);
     if (BuildConfig.DEBUG && BuildConfig.TELEGRAM_TEST_DC)
       button("Проверить нативную TDLib (офлайн)", this::probeNativeTdlibOffline);
-    if (BuildConfig.TELEGRAM_TEST_DC) {
+    if (BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK) {
+      message("Только тестовые серверы Telegram. Потребуется отдельная тестовая учётная запись. Обычные чаты недоступны.");
+      button("Подключить тестовый Telegram (отдельный аккаунт)", this::askBeforeConnect);
+    } else if (BuildConfig.TELEGRAM_TEST_DC) {
       message("В учебной версии вход в Telegram отключён. Интернет не требуется: нажми кнопку учебного чата.");
     } else if (!BuildConfig.DEBUG) {
       button("Подключить настоящий Telegram", this::askBeforeConnect);
@@ -573,8 +576,8 @@ public final class MainActivity extends Activity {
     }
   }
   private void askBeforeConnect() {
-    if(BuildConfig.TELEGRAM_TEST_DC){
-      showStatus("Учебная сборка не подключается к Telegram. Используй вымышленный чат.");
+    if(BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK){
+      showStatus("Офлайн-сборка не подключается к Telegram. Используй вымышленный чат.");
       return;
     }
     if (BuildConfig.DEBUG) { showStatus("В демонстрационной сборке доступ к Telegram отключён."); return; }
@@ -596,7 +599,11 @@ public final class MainActivity extends Activity {
         (d, which) -> beginConnect()).show();
   }
   private void beginConnect() {
-    if (BuildConfig.DEBUG) { showStatus("В демонстрационной сборке подключение запрещено."); return; }
+    if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)
+        || (!BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_PRODUCTION)) {
+      showStatus("Сетевое подключение заблокировано конфигурацией сборки.");
+      return;
+    }
     clearUi(); message("Соединяемся с " + (BuildConfig.TELEGRAM_TEST_DC ? "тестовым Telegram" : "основным Telegram") + "…");
     showStatus("Инициализация TDLib по вашему запросу…");
     worker.execute(() -> {
