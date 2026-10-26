@@ -1,6 +1,6 @@
 name: Public offline + test-DC QA APKs (no embedded Telegram credentials)
 
-# QA milestone: recompile test network APK with API cancellation cleanup and no shared-test 2FA/email prompts.
+# QA milestone: verify hard native-transport denial of 2FA/email and clear cached API hash on restored sessions.
 # Only adding this workflow on the experimental branch triggers native compilation.
 # Unrelated source pushes never automatically retrigger this expensive job.
 on:
