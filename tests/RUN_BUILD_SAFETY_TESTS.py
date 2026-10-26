@@ -114,6 +114,11 @@ assert 'disable_notification",true' in activity
 
 assert 'testApiHash = null;' in activity
 assert 'testApiId = 0;' in activity
+assert 'case "authorizationStateReady":\n          // An existing TDLib session' in activity
+assert 'clearPendingTestApiCredentials();\n          showStatus("Подключено напрямую к Telegram.' in activity
+assert 'Test DC forbids personal 2FA and email authentication' in transport
+for name in ('checkAuthenticationPassword', 'setAuthenticationEmailAddress', 'checkAuthenticationEmailCode'):
+    assert ('"'+name+'".equals(method)') in transport, 'Test transport missing disallow for '+name
 # API identifiers belong to the connection attempt, not to the Activity's lifetime.
 assert 'private void clearPendingTestApiCredentials()' in activity
 assert 'if (td != null) {' in activity and 'Сеанс Telegram уже запущен' in activity
