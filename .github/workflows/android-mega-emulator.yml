@@ -1,6 +1,6 @@
 name: One-shot offline Android emulator mega stress (no Telegram access)
 
-# User-authorized QA: Android million-word export + exact-count Java compilation fix.
+# User-authorized QA: final Android UI offline-notice visibility and JNI smoke after verified million-word export.
 # Automatically starts ONLY when this particular workflow is created/changed.
 on:
   push:
