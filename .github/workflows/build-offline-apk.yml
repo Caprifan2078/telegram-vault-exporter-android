@@ -1,6 +1,6 @@
 name: Public offline + test-DC QA APKs (no embedded Telegram credentials)
 
-# QA milestone: compile confirmed Test DC registration and phone-number protections (no live credentials).
+# QA milestone: complete a real 1m-word, 48-MiB encrypted export with network/disk failure recovery.
 # Only adding this workflow on the experimental branch triggers native compilation.
 # Unrelated source pushes never automatically retrigger this expensive job.
 on:
@@ -60,6 +60,9 @@ jobs:
         run: |
           bash native-host-test/RUN_NATIVE_HOST_TEST.sh
           bash transport-jvm/RUN_TRANSPORT_JVM.sh
+      - name: Million-word high-entropy real exporter stress with offline fault injection
+        run: |
+          bash integration-jvm/RUN_MEGA_JVM.sh
       # Cache ONLY the locally verified public-source native output from this
       # dedicated branch so repeated Android/Gradle fixes don't waste >20 minutes.
       - name: Restore verified TDLib binary cache
