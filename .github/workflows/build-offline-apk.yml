@@ -51,7 +51,16 @@ jobs:
           "$SDKMANAGER" --version
       - name: Install Android platform, NDK and CMake
         run: |
-          "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;26.3.11579264'
+          # The SDK repository occasionally returns truncated NDK ZIP files.
+          # Retry once after deleting ONLY the failed, untrusted NDK directory.
+          if ! "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;26.3.11579264'; then
+            echo 'SDK download/unzip failed; retrying clean pinned NDK installation once'
+            rm -rf "$ANDROID_HOME/ndk/26.3.11579264"
+            sleep 4
+            "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;26.3.11579264'
+          fi
+          test -d "$ANDROID_HOME/ndk/26.3.11579264"
+          test -f "$ANDROID_HOME/ndk/26.3.11579264/source.properties"
       - name: Static source safeguards before compiling
         run: |
           python3 tests/RUN_BUILD_SAFETY_TESTS.py
