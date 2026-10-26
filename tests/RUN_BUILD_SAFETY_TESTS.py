@@ -154,4 +154,14 @@ assert 'GITHUB_ACTIONS:-' in native_script
 assert 'docker build' in native_script and 'git -C "$WORK/source" fetch' in native_script
 assert 'app/src/main/jniLibs/**/*.so' in (ROOT/'.gitignore').read_text()
 subprocess.run(['bash','-n',str(ROOT/'scripts/build_official_tdlib_android.sh')],check=True)
+mega_source=(ROOT/'app/src/main/java/org/vault/exporter/MegaMockTdlib.java').read_text()
+mega_verify=(ROOT/'app/src/main/java/org/vault/exporter/MegaArchiveVerifier.java').read_text()
+mega_runner=(ROOT/'integration-jvm/RUN_MEGA_JVM.sh').read_text()
+assert 'ARCHIVED_WORDS=TOTAL_WORDS-8*WORDS_PER_MESSAGE' in mega_source
+assert 'words!=MegaMockTdlib.ARCHIVED_WORDS' in mega_verify
+assert '1 079 840' in activity and '1 080 000' not in activity
+assert 'Vault_MEGA_1079840_WORDS.tva' in activity
+assert 'Vault_MEGA_1079840_WORDS.tva' in (ROOT/'ci/mega-mixed-media-apk-smoke.sh').read_text()
+assert '-Xmx96m' in mega_runner and 'TestMillionWordsStress' in mega_runner
+print('PASS: exact archived million-word count, host stress runner and Android filename contract')
 print('PASS: pinned TDLib/OpenSSL arm64 builder recipe and local-only installation contract')
