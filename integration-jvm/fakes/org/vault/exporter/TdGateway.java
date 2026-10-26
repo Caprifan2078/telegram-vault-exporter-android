@@ -14,6 +14,9 @@ public final class TdGateway {
   public void misrouteChatMetadata(){misroutedChatMetadata=true;}
   public void misrouteStalledProbe(){misrouteStalledProbe=true;}
   final Map<Integer,JSONObject> overrides=new HashMap<>();
+  final Map<Integer,JSONObject> messageOverrides=new HashMap<>();
+  /** Exact synthetic TDLib message response override, never a network call. */
+  public void messageOverride(int position,JSONObject message){messageOverrides.put(position,message);}
   public void contentOverride(int position, JSONObject replacement){overrides.put(position,replacement);}
   public TdGateway(long[] ids,File root){this.ids=ids;this.root=root;}
   public void failOnHistoryCall(int n){failHistoryAt=n;}
@@ -47,6 +50,7 @@ public final class TdGateway {
       default:return new JSONObject().put("@type","messageText").put("text",new JSONObject().put("text","Synthetic #"+id));
     }
   }
+  private File cached(int id) { return new File(root,"tdlib/files/file-"+id+".bin"); }
   public JSONObject await(JSONObject req,long timeout)throws Exception {
     String type=req.optString("@type");
     if(type.equals("getChat")){
@@ -65,26 +69,45 @@ public final class TdGateway {
           .put("content",content(6,ids[6])));
         return new JSONObject().put("messages",arr);
       }
-      for(int i=start;i<ids.length&&i<start+Math.min(7,limit);i++)
-        arr.put(new JSONObject().put("id",ids[i])
-          .put("chat_id", (i==misroutedPosition ||
-              (misrouteStalledProbe && from==ids[6]-1 && i==7))?9999L:req.getLong("chat_id"))
-          .put("sender_id",new JSONObject().put("@type","messageSenderUser").put("user_id",55))
-          .put("content",overrides.getOrDefault(i,content(i,ids[i]))));
+      for(int i=start;i<ids.length&&i<start+Math.min(7,limit);i++){
+        JSONObject message=messageOverrides.containsKey(i)
+          ?new JSONObject(messageOverrides.get(i).toString())
+          :new JSONObject().put("id",ids[i])
+            .put("chat_id",req.getLong("chat_id"))
+            .put("sender_id",new JSONObject().put("@type","messageSenderUser").put("user_id",55))
+            .put("content",overrides.getOrDefault(i,content(i,ids[i])));
+        if(i==misroutedPosition || (misrouteStalledProbe && from==ids[6]-1 && i==7))
+          message.put("chat_id",9999L);
+        arr.put(message);
+      }
       return new JSONObject().put("messages",arr);
     }
     if(type.equals("downloadFile")){
       int id=req.getInt("file_id");if(id==failFileId)throw new IOException("SIMULATED_MEDIA_DOWNLOAD_ERROR");
-      File f=new File(root,"tdlib/files/file-"+id+".bin");f.getParentFile().mkdirs();
+      File f=cached(id);f.getParentFile().mkdirs();
       try(OutputStream out=new FileOutputStream(f)){
         if(largeVideo && id==503){
           byte[] chunk=new byte[65536];Arrays.fill(chunk,(byte)0x6a);
           for(int i=0;i<48*1024*1024/chunk.length;i++)out.write(chunk);
         }else out.write(contentFor(id));
       }
-      return new JSONObject().put("local",new JSONObject().put("is_downloading_completed",true).put("path",f.getCanonicalPath()));
+      return new JSONObject().put("id",id).put("size",f.length())
+        .put("local",new JSONObject().put("is_downloading_completed",true)
+          .put("is_downloading_active",false).put("path",f.getCanonicalPath()));
     }
-    if(type.equals("deleteFile"))return new JSONObject().put("@type","ok");
+    if(type.equals("cancelDownloadFile"))return new JSONObject().put("@type","ok");
+    if(type.equals("deleteFile")){
+      File f=cached(req.getInt("file_id"));
+      if(f.exists()&&!f.delete())throw new IOException("Mock failed to remove cached plaintext");
+      return new JSONObject().put("@type","ok");
+    }
+    if(type.equals("getFile")){
+      int id=req.getInt("file_id");File f=cached(id);
+      return new JSONObject().put("id",id)
+        .put("local",new JSONObject().put("is_downloading_active",false)
+          .put("is_downloading_completed",f.isFile())
+          .put("path",f.isFile()?f.getCanonicalPath():""));
+    }
     throw new IOException("Unsupported fake call: "+type);
   }
 }

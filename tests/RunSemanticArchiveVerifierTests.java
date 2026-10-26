@@ -92,8 +92,23 @@ public final class RunSemanticArchiveVerifierTests {
     a=fixture();change(a,6,"[42]");reject(a,"nonobject participants");
     a=fixture();change(a,7,manifest(3,2).replace("\"schema\"", "\"participants\":2,\"schema\""));reject(a,"participant count mismatch");
   }
+  static void testMultiAttachment()throws Exception {
+    // TDLib may put several full-size attachments in ONE paid-media message.
+    // Distinct (message_id,file_id) pairs are valid; repeating a pair is not.
+    ArrayList<Entry> good=fixture();
+    change(good,1,index(100,501,".jpg",PHOTO)+index(100,503,".mp4",CIRCLE));
+    good.add(3,e("media/100/503.mp4",CIRCLE));
+    change(good,8,manifest(3,3));
+    pass(good,9);
+    ArrayList<Entry> duplicate=fixture();
+    change(duplicate,1,index(100,501,".jpg",PHOTO)+index(100,501,".mp4",CIRCLE));
+    duplicate.add(3,e("media/100/501.mp4",CIRCLE));
+    change(duplicate,8,manifest(3,3));
+    reject(duplicate,"same message/file ID reused under another extension");
+  }
   public static void main(String[] args)throws Exception {
     testCorruption();
+    testMultiAttachment();
     System.out.println("PASS "+cases+" verifier fixtures: complete archive + adversarial counts, ids, malformed JSON, tamper, path and missing file rejection");
   }
 }
