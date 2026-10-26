@@ -13,7 +13,9 @@ if ! adb install -r "$APK_UNDER_TEST"; then
   echo "FAIL: emulator does not support ARM64-only application or installation failed."
   exit 43
 fi
-test "$(adb shell pm list packages "$APP_ID" | tr -d '\r')" = "package:$APP_ID"
+if ! adb shell pm list packages "$APP_ID" | tr -d '\r' | grep -Fqx "package:$APP_ID"; then
+  echo "FAIL: expected exact offline APK package not installed"; exit 42
+fi
 adb logcat -c
 adb shell am start -W -n org.vault.exporter.sandbox/org.vault.exporter.MainActivity
 sleep 4
