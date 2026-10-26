@@ -38,3 +38,18 @@
 **Текущие результаты:** `RUN_ALL_OFFLINE.sh` локально PASS (JVM/шифрование/медиа/JNI mocks/CI/static), `RUN_BUILD_SAFETY_TESTS.py` PASS, синтаксис сборщика bash PASS. Android Gradle, нативная сборка, network test DC и APK НЕ проверены.
 
 Официальная документация: https://github.com/tdlib/td/tree/master/example/android ; https://core.telegram.org/tdlib/getting-started ; https://openssl-library.org/source/ .
+
+## Эксперимент: первая офлайн-APK через GitHub Actions (26.10.2026)
+
+Дополнительно подготовлен `.github/workflows/build-offline-apk.yml`: единичная сборка **только** при добавлении/изменении этого workflow в QA-ветке либо ручном `workflow_dispatch`; выполняется только если репозиторий публичный, на стандартном `ubuntu-latest`, с read-only правами, отменой устаревших запусков и лимитом 60 минут.
+
+CI **не получает** Telegram API-ключи, пароли, телефоны, сессии и пользовательские файлы. Использует `:app:assembleDebug` с `telegramApiId=0` и `telegramApiHash=`, официальный pinned Android TDLib, установку SDK 35/NDK 26 и фактическую проверку готовой APK через `scripts/verify_offline_apk.py`. Сборщик TDLib в CI допускается только при подтверждённом GitHub-контексте Public, правильном репозитории и явном `VAULT_ALLOW_PUBLIC_CI_TDLIB_BUILD=1`. В Private такие задания не стартуют.
+
+**Это исключительно офлайн-приложение с синтетическими сообщениями:** в готовой APK должен отсутствовать Android INTERNET permission и не должны присутствовать реальные аккаунты. Она не сможет экспортировать настоящий Telegram; для этого необходим отдельный `testDc` build и последующие сетевые испытания.
+
+Запуски (ссылки позволяют проверить результат самостоятельно):
+- [40390492441](https://github.com/Caprifan2078/telegram-vault-exporter-android/actions/runs/40390492441): **FAIL** на старом `android-actions/setup-android@v3` (установщик искал удалённый пакет `tools`). Вместо него используется preinstalled SDK `sdkmanager`.
+- [40390692350](https://github.com/Caprifan2078/telegram-vault-exporter-android/actions/runs/40390692350): **FAIL** в preflight: переменная публичности не была передана средой runner. Исправлено: явное подтверждение публичности через GitHub workflow context и точное имя репозитория.
+- [40391082134](https://github.com/Caprifan2078/telegram-vault-exporter-android/actions/runs/40391082134): **третья попытка, на момент записи native TDLib компилировалась**. Конечный результат/наличие APK ещё не подтверждены.
+
+Выпуск APK подтверждается **только** успешным `verify_offline_apk.py` и наличием артефакта `VaultExporter-offline-qa-arm64-apk` в соответствующем GitHub Actions run. Артефакт хранится 1 день. Не выдавать debug APK за production release.
