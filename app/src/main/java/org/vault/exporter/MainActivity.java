@@ -763,7 +763,11 @@ public final class MainActivity extends Activity {
       if (exporting) return;
       clearUi();
       switch(name) {
-        case "authorizationStateWaitPhoneNumber": authInput("Номер телефона в международном формате", "Номер +…", false, "Продолжить",
+        case "authorizationStateWaitPhoneNumber": authInput(
+            BuildConfig.ALLOW_TEST_DC_NETWORK
+              ? "ТОЛЬКО общедоступный тестовый номер 99966XYYYY (X=1–3). Основной номер вводить ЗАПРЕЩЕНО."
+              : "Номер телефона в международном формате",
+            BuildConfig.ALLOW_TEST_DC_NETWORK ? "+99966XYYYY" : "Номер +…", false, "Продолжить",
             value -> TdGateway.cmd("setAuthenticationPhoneNumber").put("phone_number", value)); break;
         case "authorizationStateWaitCode": authInput("Код подтверждения из Telegram", "Код", false, "Подтвердить",
             value -> TdGateway.cmd("checkAuthenticationCode").put("code", value)); break;
