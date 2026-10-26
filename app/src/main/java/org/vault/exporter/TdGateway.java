@@ -26,6 +26,8 @@ public final class TdGateway {
 
   public TdGateway(Listener callback) {
     this.listener = callback;
+    if (!TdNative.disableSensitiveLogging())
+      throw new IllegalStateException("Не удалось отключить журналы TDLib: сетевое подключение запрещено");
     client = TdNative.createClient();
     if (client == 0) throw new IllegalStateException("TDLib не включена в APK: нет официальной libtdjson.so");
     reader = new Thread(() -> {
