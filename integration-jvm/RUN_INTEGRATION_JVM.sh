@@ -10,7 +10,9 @@ javac -d "$OUT" \
   integration-jvm/fakes/org/vault/exporter/*.java \
   "$ROOT"/{OfflineArchiveFixture,ExportEngine,HistoryCursor,StagingCipher,ChunkedVault,ResumeStore,ArchiveWriter,ArchiveVerifier,TelegramRateLimit}.java \
   integration-jvm/TestHardenedExportEngine.java integration-jvm/TestEngineBoundedMemory.java \
-  integration-jvm/TestOfflineArchiveFixture.java
+  integration-jvm/TestOfflineArchiveFixture.java integration-jvm/TestSyntheticTelegramConversation.java
 java -Xmx128m -cp "$OUT" TestHardenedExportEngine
 java -Xmx32m -cp "$OUT" TestEngineBoundedMemory
 java -Xmx64m -cp "$OUT" TestOfflineArchiveFixture
+
+java -Xmx128m -cp "$OUT" TestSyntheticTelegramConversation
