@@ -72,6 +72,10 @@ public final class MainActivity extends Activity {
     } else {
       message("ВНИМАНИЕ: эта сборка подключается к настоящему Telegram. Риск ограничений стороннего API-клиента нельзя исключить.");
     }
+    // The offline/no-login guarantee must be visible ABOVE the action buttons,
+    // including on smaller screens. It must not be hidden beneath stress tests.
+    if (BuildConfig.DEBUG && BuildConfig.TELEGRAM_TEST_DC)
+      message("СТРОГО ОФЛАЙН-ДЕМО: доступ к Интернету заблокирован разрешениями Android. Вход в Telegram отключён.");
     if(BuildConfig.TELEGRAM_TEST_DC)
       button("Попробовать без аккаунта: скачать учебный чат",this::requestSyntheticExport);
     if(BuildConfig.TELEGRAM_TEST_DC)
@@ -91,7 +95,7 @@ public final class MainActivity extends Activity {
     } else if (!BuildConfig.DEBUG) {
       button("Подключить настоящий Telegram", this::askBeforeConnect);
     } else {
-      message("СТРОГО ОФЛАЙН-ДЕМО: доступ к Интернету заблокирован разрешениями Android. Вход в Telegram отключён.");
+      // The mandatory offline notice is already at the top of the screen.
     }
     message("Экспорт не запускается автоматически. Не требуется удалять или отключать основной Telegram.");
   }
