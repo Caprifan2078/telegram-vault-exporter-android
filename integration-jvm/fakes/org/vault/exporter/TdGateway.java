@@ -47,6 +47,7 @@ public final class TdGateway {
       default:return new JSONObject().put("@type","messageText").put("text",new JSONObject().put("text","Synthetic #"+id));
     }
   }
+  private File cached(int id) { return new File(root,"tdlib/files/file-"+id+".bin"); }
   public JSONObject await(JSONObject req,long timeout)throws Exception {
     String type=req.optString("@type");
     if(type.equals("getChat")){
@@ -75,16 +76,30 @@ public final class TdGateway {
     }
     if(type.equals("downloadFile")){
       int id=req.getInt("file_id");if(id==failFileId)throw new IOException("SIMULATED_MEDIA_DOWNLOAD_ERROR");
-      File f=new File(root,"tdlib/files/file-"+id+".bin");f.getParentFile().mkdirs();
+      File f=cached(id);f.getParentFile().mkdirs();
       try(OutputStream out=new FileOutputStream(f)){
         if(largeVideo && id==503){
           byte[] chunk=new byte[65536];Arrays.fill(chunk,(byte)0x6a);
           for(int i=0;i<48*1024*1024/chunk.length;i++)out.write(chunk);
         }else out.write(contentFor(id));
       }
-      return new JSONObject().put("local",new JSONObject().put("is_downloading_completed",true).put("path",f.getCanonicalPath()));
+      return new JSONObject().put("id",id).put("size",f.length())
+        .put("local",new JSONObject().put("is_downloading_completed",true)
+          .put("is_downloading_active",false).put("path",f.getCanonicalPath()));
     }
-    if(type.equals("deleteFile"))return new JSONObject().put("@type","ok");
+    if(type.equals("cancelDownloadFile"))return new JSONObject().put("@type","ok");
+    if(type.equals("deleteFile")){
+      File f=cached(req.getInt("file_id"));
+      if(f.exists()&&!f.delete())throw new IOException("Mock failed to remove cached plaintext");
+      return new JSONObject().put("@type","ok");
+    }
+    if(type.equals("getFile")){
+      int id=req.getInt("file_id");File f=cached(id);
+      return new JSONObject().put("id",id)
+        .put("local",new JSONObject().put("is_downloading_active",false)
+          .put("is_downloading_completed",f.isFile())
+          .put("path",f.isFile()?f.getCanonicalPath():""));
+    }
     throw new IOException("Unsupported fake call: "+type);
   }
 }
