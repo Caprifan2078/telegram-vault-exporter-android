@@ -32,6 +32,23 @@ public final class TestTdGatewayLifecycle {
         check(blocked, "Unsafe Telegram RPC was accepted: " + forbidden);
       }
       check(TdNative.outbound.isEmpty(), "Blocked RPC leaked to native TDLib");
+      boolean productionRegistrationBlocked=false;
+      try { gw.call(TdGateway.cmd("registerUser")
+                .put("first_name","Test").put("last_name","")); }
+      catch(SecurityException expected){productionRegistrationBlocked=true;}
+      check(productionRegistrationBlocked,"Default gateway allowed silent user registration");
+      check(TdNative.outbound.isEmpty(),"Registration was sent by an unauthorized client");
+      TdGateway isolatedTest=new TdGateway(event->{},true);
+      try {
+        CompletableFuture<JSONObject> deliberate=isolatedTest.call(TdGateway.cmd("registerUser")
+          .put("first_name","Test").put("last_name","").put("disable_notification",true));
+        String emitted=TdNative.outbound.poll(2,TimeUnit.SECONDS);
+        check(emitted!=null && "registerUser".equals(new JSONObject(emitted).getString("@type")),
+          "Explicit isolated TEST DC registration was not dispatched");
+        deliberate.cancel(false);
+        check(pending(isolatedTest).isEmpty(),"Test registration request leaked");
+      } finally {isolatedTest.stop();TdNative.flush();}
+
       // 150 asynchronous unanswered calls, all cancelled: no pending map growth.
       List<CompletableFuture<JSONObject>> jobs=new ArrayList<>();
       for(int i=0;i<150;i++)jobs.add(gw.call(TdGateway.cmd("getChatHistory")));
