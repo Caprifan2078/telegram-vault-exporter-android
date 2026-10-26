@@ -76,3 +76,41 @@ assert 'Arrays.fill(pendingPassphrase' in activity
 assert 'final long resetChatId=selectedChatId;' in activity
 assert '"export-progress"),resetChatId,secret)' in activity
 print('PASS: pinned arm64-only TDLib build gate, ELF ABI negative fixtures, picker password-loss safety')
+
+# Test-DC NETWORK build is separate from all offline demonstrations and production.
+gradle=(ROOT/'app/build.gradle').read_text()
+manifest_main=(ROOT/'app/src/main/AndroidManifest.xml').read_text()
+manifest_debug=(ROOT/'app/src/debug/AndroidManifest.xml').read_text()
+manifest_sandbox=(ROOT/'app/src/sandboxDc/AndroidManifest.xml').read_text()
+assert "testDc {" in gradle and "applicationIdSuffix '.networktest'" in gradle
+assert "buildConfigField 'boolean', 'ALLOW_TEST_DC_NETWORK', 'false'" in gradle
+assert "buildConfigField 'boolean', 'ALLOW_TEST_DC_NETWORK', 'true'" in gradle
+assert "buildConfigField 'boolean', 'TELEGRAM_TEST_DC', 'true'" in gradle
+assert "buildConfigField 'boolean', 'ALLOW_PRODUCTION', 'false'" in gradle
+assert "sandboxDc/testDc APK must always use telegramEnvironment=test" in gradle
+assert 'uses-permission android:name="android.permission.INTERNET"' in manifest_main
+for manifest in (manifest_debug, manifest_sandbox):
+    assert 'tools:node="remove"' in manifest
+assert not (ROOT/'app/src/testDc/AndroidManifest.xml').exists(), 'Test network manifest must inherit approved main INTERNET only'
+assert 'BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK' in activity
+assert 'BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK' in activity
+assert 'private void beginConnect()' in activity
+assert '.put("use_test_dc",BuildConfig.TELEGRAM_TEST_DC)' in activity
+assert 'if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)' in activity
+assert 'button("Подключить тестовый Telegram (отдельный аккаунт)", this::askBeforeConnect);' in activity
+print('PASS: isolated opt-in test-DC network build; offline variants remain disconnected')
+
+# Pinned native build recipe must use current supported OpenSSL, not old 1.1.1.
+native_script=(ROOT/'scripts/build_official_tdlib_android.sh').read_text()
+assert 'https://github.com/tdlib/td.git' in native_script
+assert 'ea3f69ce11aef458bfbb09869b809ede4447486f' in native_script
+assert '0f00a668585883a403ffe3c63f2567d25af72d49' in native_script
+assert 'OPENSSL_VERSION=openssl-3.5.9' in native_script
+assert 'ANDROID_NDK_VERSION=26.3.11579264' in native_script
+assert 'TDLIB_INTERFACE=JSON' in native_script
+assert 'verify_tdlib_elf.py' in native_script
+assert 'GITHUB_ACTIONS:-' in native_script
+assert 'docker build' in native_script and 'git -C "$WORK/source" fetch' in native_script
+assert 'app/src/main/jniLibs/**/*.so' in (ROOT/'.gitignore').read_text()
+subprocess.run(['bash','-n',str(ROOT/'scripts/build_official_tdlib_android.sh')],check=True)
+print('PASS: pinned TDLib/OpenSSL arm64 builder recipe and local-only installation contract')
