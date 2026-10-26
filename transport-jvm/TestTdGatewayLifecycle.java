@@ -22,6 +22,16 @@ public final class TestTdGatewayLifecycle {
     ExecutorService pool=Executors.newCachedThreadPool();
     TdGateway gw=new TdGateway(event->{});
     try {
+      // Network policy must never send or delete a user's messages, mark
+      // messages read, join chats, or accidentally enable unreviewed RPCs.
+      for (String forbidden : new String[]{"sendMessage", "deleteMessages", "viewMessages",
+           "joinChat", "addChatMember", "setChatTitle", "futureUnreviewedMethod", ""}) {
+        boolean blocked = false;
+        try { gw.call(TdGateway.cmd(forbidden)); }
+        catch (SecurityException expected) { blocked = true; }
+        check(blocked, "Unsafe Telegram RPC was accepted: " + forbidden);
+      }
+      check(TdNative.outbound.isEmpty(), "Blocked RPC leaked to native TDLib");
       // 150 asynchronous unanswered calls, all cancelled: no pending map growth.
       List<CompletableFuture<JSONObject>> jobs=new ArrayList<>();
       for(int i=0;i<150;i++)jobs.add(gw.call(TdGateway.cmd("getChatHistory")));
