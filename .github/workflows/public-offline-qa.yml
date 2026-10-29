@@ -2,7 +2,7 @@ name: Public offline QA (Vault Exporter alpha)
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, qa/vault-modern-ui-20261029]
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
