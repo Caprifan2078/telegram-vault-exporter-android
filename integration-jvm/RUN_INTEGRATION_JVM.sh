@@ -8,11 +8,13 @@ javac -d "$OUT" \
   integration-jvm/fakes/org/json/*.java \
   integration-jvm/fakes/android/content/Context.java \
   integration-jvm/fakes/org/vault/exporter/*.java \
-  "$ROOT"/{OfflineArchiveFixture,ExportEngine,HistoryCursor,StagingCipher,ChunkedVault,ResumeStore,ArchiveWriter,ArchiveVerifier,TelegramRateLimit}.java \
+  "$ROOT"/{OfflineArchiveFixture,ExportEngine,HistoryCursor,StagingCipher,ChunkedVault,ResumeStore,ArchiveWriter,ArchiveVerifier,SyntheticZipWriter,TelegramRateLimit}.java \
   integration-jvm/TestHardenedExportEngine.java integration-jvm/TestEngineBoundedMemory.java \
-  integration-jvm/TestOfflineArchiveFixture.java integration-jvm/TestSyntheticTelegramConversation.java
+  integration-jvm/TestOfflineArchiveFixture.java integration-jvm/TestSyntheticTelegramConversation.java \
+  integration-jvm/TestSyntheticZipHtmlCompatibility.java
 java -Xmx128m -cp "$OUT" TestHardenedExportEngine
 java -Xmx32m -cp "$OUT" TestEngineBoundedMemory
 java -Xmx64m -cp "$OUT" TestOfflineArchiveFixture
 
 java -Xmx128m -cp "$OUT" TestSyntheticTelegramConversation
+java -Xmx64m -cp "$OUT" TestSyntheticZipHtmlCompatibility
