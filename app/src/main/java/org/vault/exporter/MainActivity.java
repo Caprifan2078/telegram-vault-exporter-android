@@ -39,65 +39,115 @@ public final class MainActivity extends Activity {
   private char[] pendingPassphrase;
   // The document picker is an asynchronous operation; preserve the original chat.
   private long pendingChatId = 0;
-  private final int BACKGROUND=Color.rgb(10, 18, 32), WHITE=0xffeef4ff, MUTED=0xff97a9c4;
+  private final int BACKGROUND=0xff0B1220, WHITE=0xffF1F6FF, MUTED=0xff93A6BF;
 
+  private final int SURFACE=0xff141F33, SURFACE_RAISED=0xff1A2942, BORDER=0xff314562, ACCENT=0xff6B9EFF, SECONDARY=0xffC2D0E5;
+  private final int SUCCESS=0xff80DBB4, WARNING=0xffF4C47C;
   @Override public void onCreate(Bundle state) {
     super.onCreate(state);
-    // Screenshot/recording is allowed ONLY for isolated test-DC debug demo.
-    // Keep privacy protection for production and all release APKs, including debug production.
-    // Debug APK has INTERNET permission removed via app/src/debug/AndroidManifest.xml.
+    // Preserve privacy protection for network/production builds.
     if (!(BuildConfig.DEBUG && BuildConfig.TELEGRAM_TEST_DC))
       getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-    getWindow().setStatusBarColor(BACKGROUND); getWindow().setNavigationBarColor(BACKGROUND);
-    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-    ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BACKGROUND);
-    root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(24, 36, 24, 36);
-    scroll.addView(root); setContentView(scroll);
-    title("Vault Exporter", 28, WHITE);
-    title("ЭКСПОРТЁР • ЛОКАЛЬНО И БЕЗ ПОСРЕДНИКОВ", 11, MUTED);
-    title("Независимое приложение на базе Telegram API. Не является официальным приложением Telegram и не связано с его разработчиками.", 12, MUTED);
-    title("Первый вход создаст отдельный сеанс Telegram. Применяются правила Telegram для сторонних клиентов; нулевой риск ограничений не гарантируется.", 12, MUTED);
-    status = title("Не подключено к Telegram. Данные аккаунта не запрашиваются.", 15, WHITE);
-    interactive = new LinearLayout(this); interactive.setOrientation(LinearLayout.VERTICAL);
-    root.addView(interactive);
-    title("Переписка скачивается напрямую через TDLib. Архив шифруется локально. Никаких серверов разработчика.", 13, MUTED);
+    getWindow().setStatusBarColor(BACKGROUND);
+    getWindow().setNavigationBarColor(BACKGROUND);
+    getWindow().getDecorView().setSystemUiVisibility(0);
+
+    LinearLayout shell=new LinearLayout(this);
+    shell.setOrientation(LinearLayout.VERTICAL);
+    shell.setBackgroundColor(BACKGROUND);
+    LinearLayout top=new LinearLayout(this);
+    top.setOrientation(LinearLayout.VERTICAL);
+    top.setPadding(dp(20),dp(17),dp(20),dp(14));
+    top.setBackgroundColor(BACKGROUND);
+
+    LinearLayout brand=new LinearLayout(this);
+    brand.setGravity(Gravity.CENTER_VERTICAL);
+    TextView mark=new TextView(this);
+    mark.setText("↧");mark.setTextColor(WHITE);mark.setTextSize(30);
+    mark.setGravity(Gravity.CENTER);
+    mark.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+      new int[]{0xff3975F6,0xff7859DA}){{setCornerRadius(dp(16));}});
+    LinearLayout.LayoutParams markLp=new LinearLayout.LayoutParams(dp(52),dp(52));
+    markLp.setMargins(0,0,dp(14),0);
+    brand.addView(mark,markLp);
+
+    LinearLayout brandText=new LinearLayout(this);
+    brandText.setOrientation(LinearLayout.VERTICAL);
+    TextView name=new TextView(this);
+    name.setText("VAULT EXPORTER");name.setTextColor(WHITE);
+    name.setTextSize(20);name.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+    name.setLetterSpacing(.035f);
+    brandText.addView(name);
+    TextView slogan=new TextView(this);
+    slogan.setText("Ваши переписки. Ваш архив.");slogan.setTextColor(MUTED);
+    slogan.setTextSize(12);slogan.setPadding(0,dp(3),0,0);
+    brandText.addView(slogan);
+    brand.addView(brandText);
+    top.addView(brand);
+
+    status=new TextView(this);
+    status.setText("Офлайн. Данные аккаунта не запрашиваются.");
+    status.setTextColor(SECONDARY);status.setTextSize(13);
+    status.setGravity(Gravity.CENTER_VERTICAL);status.setMinHeight(dp(49));
+    status.setPadding(dp(14),dp(10),dp(14),dp(10));
+    status.setBackground(rounded(SURFACE_RAISED,dp(14),BORDER));
+    LinearLayout.LayoutParams statusLp=new LinearLayout.LayoutParams(-1,-2);
+    statusLp.setMargins(0,dp(16),0,0);
+    top.addView(status,statusLp);
+    shell.addView(top);
+
+    ScrollView scroll=new ScrollView(this);
+    scroll.setFillViewport(true);scroll.setClipToPadding(false);
+    scroll.setVerticalScrollBarEnabled(false);
+    root=new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setPadding(dp(20),dp(8),dp(20),dp(24));
+    scroll.addView(root);
+    shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+    interactive=new LinearLayout(this);
+    interactive.setOrientation(LinearLayout.VERTICAL);
+    root.addView(interactive,new LinearLayout.LayoutParams(-1,-2));
+    setContentView(shell);
     showWelcome();
   }
+
   /** No network connection is made by merely launching this Activity. */
   private void showWelcome() {
     clearUi();
-    if (BuildConfig.TELEGRAM_TEST_DC) {
-      message("РЕЖИМ ПРОВЕРКИ: тестовые серверы Telegram. Здесь нет переписок основного аккаунта.");
-      message("Доступность тестовой регистрации зависит от Telegram. Не вводите личные данные в общедоступных тестовых аккаунтах.");
+    section("ПРОСТОЙ СТАРТ", "Вначале проверяем архив без входа в Telegram");
+    if(BuildConfig.TELEGRAM_TEST_DC) {
+      note("БЕЗОПАСНЫЙ РЕЖИМ",
+        "Учебная переписка вымышлена. Реальные аккаунты и чаты не используются.",
+        SUCCESS);
+      primaryButton("↓   Скачать учебную переписку", this::requestSyntheticExport);
+      message("60 сообщений и 7 медиафайлов. ZIP можно открыть отдельно и проверить в читалке.");
+      section("ПРОВЕРКА НАГРУЗКИ", "Дополнительные офлайн-сценарии");
+      button("480 000 слов · большие файлы",this::requestHeavyExport);
+      button("1 079 840 слов · разные медиа",this::requestMegaExport);
+      button("Как устроен экспорт",this::showOfflineDemo);
+      if (BuildConfig.DEBUG) {
+        button("Создать защищённый учебный .tva",this::requestOfflineFixture);
+        button("Проверить движок TDLib (офлайн)",this::probeNativeTdlibOffline);
+      }
+      section("ПОДКЛЮЧЕНИЕ", "Отдельный добровольный этап");
+      if (BuildConfig.ALLOW_TEST_DC_NETWORK) {
+        note("ТЕСТОВЫЕ СЕРВЕРЫ",
+          "Автоматический вход через номера +99966… может быть недоступен. Не используй личный или рабочий номер и не перебирай коды.",
+          WARNING);
+        button("Подключить тестовый сервер",this::askBeforeConnect);
+      } else {
+        note("ИНТЕРНЕТ ОТКЛЮЧЁН",
+          "В этой версии подключение к Telegram заблокировано. Можно проверять экспорт на вымышленных данных.",
+          ACCENT);
+      }
     } else {
-      message("ВНИМАНИЕ: эта сборка подключается к настоящему Telegram. Риск ограничений стороннего API-клиента нельзя исключить.");
+      note("ВНИМАНИЕ",
+        "Это независимый клиент Telegram API. Для стороннего клиента нельзя гарантировать отсутствие ограничений аккаунта.",
+        WARNING);
+      if (!BuildConfig.DEBUG)primaryButton("Подключить Telegram",this::askBeforeConnect);
+      button("Как устроен экспорт",this::showOfflineDemo);
     }
-    // The offline/no-login guarantee must be visible ABOVE the action buttons,
-    // including on smaller screens. It must not be hidden beneath stress tests.
-    if (BuildConfig.DEBUG && BuildConfig.TELEGRAM_TEST_DC)
-      message("СТРОГО ОФЛАЙН-ДЕМО: доступ к Интернету заблокирован разрешениями Android. Вход в Telegram отключён.");
-    if(BuildConfig.TELEGRAM_TEST_DC)
-      button("Попробовать без аккаунта: скачать учебный чат",this::requestSyntheticExport);
-    if(BuildConfig.TELEGRAM_TEST_DC)
-      button("Тяжёлый тест: 480 000 слов и большие файлы",this::requestHeavyExport);
-    if(BuildConfig.TELEGRAM_TEST_DC)
-      button("Миллион слов + кружки, голосовые и стикеры",this::requestMegaExport);
-    button("Посмотреть, как работает экспорт (офлайн)", this::showOfflineDemo);
-    if (BuildConfig.DEBUG && BuildConfig.TELEGRAM_TEST_DC)
-      button("Создать проверочный архив .tva (офлайн)", this::requestOfflineFixture);
-    if (BuildConfig.DEBUG && BuildConfig.TELEGRAM_TEST_DC)
-      button("Проверить нативную TDLib (офлайн)", this::probeNativeTdlibOffline);
-    if (BuildConfig.TELEGRAM_TEST_DC && BuildConfig.ALLOW_TEST_DC_NETWORK) {
-      message("Только тестовые серверы Telegram. Потребуется отдельная тестовая учётная запись. Обычные чаты недоступны.");
-      button("Подключить тестовый Telegram (отдельный аккаунт)", this::askBeforeConnect);
-    } else if (BuildConfig.TELEGRAM_TEST_DC) {
-      message("В учебной версии вход в Telegram отключён. Интернет не требуется: нажми кнопку учебного чата.");
-    } else if (!BuildConfig.DEBUG) {
-      button("Подключить настоящий Telegram", this::askBeforeConnect);
-    } else {
-      // The mandatory offline notice is already at the top of the screen.
-    }
-    message("Экспорт не запускается автоматически. Не требуется удалять или отключать основной Telegram.");
+    footnote("Архивы создаются на устройстве. Экспорт не запускается автоматически и не требует удаления официального Telegram.");
   }
 
   /** Runs the actual ExportEngine against a fictional TDLib-shaped local backend.
@@ -714,23 +764,101 @@ public final class MainActivity extends Activity {
     });
   }
   private int dp(int value) { return (int)(getResources().getDisplayMetrics().density * value + .5f); }
-  private TextView title(String text, int size, int color) {
-    TextView v = new TextView(this); v.setText(text); v.setTextColor(color); v.setTextSize(size);
-    v.setPadding(0, dp(4), 0, dp(13)); root.addView(v); return v;
+  private GradientDrawable rounded(int fill,int radius,int stroke) {
+    GradientDrawable drawable=new GradientDrawable();
+    drawable.setColor(fill);drawable.setCornerRadius(radius);
+    if(stroke!=0)drawable.setStroke(dp(1),stroke);
+    return drawable;
+  }
+  private void section(String label,String summary) {
+    TextView heading=new TextView(this);
+    heading.setText(label);heading.setTextColor(WHITE);
+    heading.setTextSize(15);heading.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+    heading.setLetterSpacing(.04f);
+    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
+    lp.setMargins(0,dp(22),0,dp(4));
+    interactive.addView(heading,lp);
+    if(summary!=null&&!summary.isEmpty()){
+      TextView sub=new TextView(this);sub.setText(summary);sub.setTextSize(13);
+      sub.setTextColor(MUTED);sub.setLineSpacing(dp(2),1f);
+      LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
+      p.setMargins(0,0,0,dp(12));
+      interactive.addView(sub,p);
+    }
+  }
+  private void note(String heading,String body,int tint) {
+    LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);
+    card.setPadding(dp(15),dp(14),dp(15),dp(14));
+    card.setBackground(rounded(SURFACE,dp(17),BORDER));
+    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
+    lp.setMargins(0,dp(5),0,dp(11));
+    TextView caption=new TextView(this);caption.setText("●  "+heading);
+    caption.setTextColor(tint);caption.setTextSize(11);
+    caption.setTypeface(Typeface.DEFAULT,Typeface.BOLD);caption.setLetterSpacing(.045f);
+    card.addView(caption);
+    TextView detail=new TextView(this);detail.setText(body);detail.setTextSize(13);
+    detail.setTextColor(SECONDARY);detail.setLineSpacing(dp(3),1f);
+    LinearLayout.LayoutParams detailLp=new LinearLayout.LayoutParams(-1,-2);
+    detailLp.setMargins(0,dp(7),0,0);
+    card.addView(detail,detailLp);interactive.addView(card,lp);
+  }
+  private void footnote(String value){
+    TextView note=new TextView(this);
+    note.setText(value);note.setTextSize(12);
+    note.setTextColor(MUTED);note.setLineSpacing(dp(3),1f);
+    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
+    p.setMargins(0,dp(20),0,dp(12));
+    interactive.addView(note,p);
   }
   private TextView message(String text) {
-    TextView v=new TextView(this); v.setText(text); v.setTextSize(15); v.setTextColor(WHITE);
-    v.setPadding(0, dp(12), 0, dp(12)); interactive.addView(v); return v;
+    TextView v=new TextView(this);
+    v.setText(text);v.setTextSize(14);v.setTextColor(SECONDARY);
+    v.setLineSpacing(dp(3),1f);
+    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
+    p.setMargins(0,dp(8),0,dp(9));
+    interactive.addView(v,p);
+    return v;
   }
-  private Button button(String text, Runnable callback) {
-    Button btn=new Button(this); btn.setAllCaps(false); btn.setText(text); btn.setTextSize(16);
-    btn.setTextColor(WHITE);
-    GradientDrawable shape=new GradientDrawable(); shape.setColor(0xff2865ec); shape.setCornerRadius(dp(18));
-    btn.setBackground(shape);
-    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(56)); p.setMargins(0,dp(9),0,dp(9));
-    interactive.addView(btn,p); btn.setOnClickListener(v -> callback.run()); return btn;
+  private Button primaryButton(String text,Runnable callback) {
+    return actionButton(text,callback,true);
   }
-  private void showStatus(String text) { runOnUiThread(() -> status.setText(text)); }
+  private Button button(String text,Runnable callback) {
+    return actionButton(text,callback,false);
+  }
+  private Button actionButton(String text,Runnable callback,boolean primary) {
+    Button btn=new Button(this);btn.setAllCaps(false);
+    btn.setText(text);btn.setTextSize(15);btn.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+    btn.setTextColor(WHITE);btn.setGravity(Gravity.CENTER_VERTICAL|Gravity.START);
+    btn.setPadding(dp(18),dp(12),dp(18),dp(12));btn.setMinHeight(dp(56));
+    btn.setStateListAnimator(null);
+    GradientDrawable shape=primary
+      ?new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{0xff356CE7,0xff6356D9})
+      :rounded(SURFACE_RAISED,dp(15),BORDER);
+    shape.setCornerRadius(dp(15));
+    btn.setBackground(new android.graphics.drawable.RippleDrawable(
+      android.content.res.ColorStateList.valueOf(0x66FFFFFF),shape,null));
+    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
+    p.setMargins(0,dp(5),0,dp(5));
+    interactive.addView(btn,p);btn.setOnClickListener(v->callback.run());
+    return btn;
+  }
+  private void styleInput(EditText input) {
+    input.setTextColor(WHITE);input.setHintTextColor(MUTED);
+    input.setTextSize(16);input.setSingleLine(true);
+    input.setPadding(dp(14),dp(12),dp(14),dp(12));
+    input.setMinHeight(dp(55));
+    input.setBackground(rounded(SURFACE_RAISED,dp(13),BORDER));
+  }
+  private void showStatus(String text) {
+    runOnUiThread(()->{
+      if(status!=null){
+        status.setText("●  "+text);
+        status.setContentDescription(text);
+        status.setTextColor(text.startsWith("Ошибка")||text.contains("не удалось")
+          ||text.contains("не подтвержд")?WARNING:SECONDARY);
+      }
+    });
+  }
   private void clearUi() { interactive.removeAllViews(); }
   private void onTdEvent(JSONObject event) {
     if ("updateAuthorizationState".equals(event.optString("@type")))
@@ -884,11 +1012,13 @@ public final class MainActivity extends Activity {
   @FunctionalInterface private interface AuthCommand { JSONObject create(String value) throws Exception; }
   private void authInput(String header, String hint, boolean hidden, String action, AuthCommand cmd) {
     message(header);
-    EditText input=new EditText(this); input.setTextColor(WHITE); input.setHintTextColor(MUTED); input.setHint(hint);
+    EditText input=new EditText(this); styleInput(input); input.setHint(hint);
     if(hidden) input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
     else if(hint.contains("+")) input.setInputType(InputType.TYPE_CLASS_PHONE);
-    interactive.addView(input);
-    Button submit=button(action, () -> {});
+    LinearLayout.LayoutParams inputLp=new LinearLayout.LayoutParams(-1,-2);
+    inputLp.setMargins(0,dp(10),0,dp(10));
+    interactive.addView(input,inputLp);
+    Button submit=primaryButton(action, () -> {});
     submit.setOnClickListener(view -> {
       if (!submit.isEnabled()) return;
       String val=hidden ? input.getText().toString() : input.getText().toString().trim(); if(val.isEmpty()) return;
@@ -903,9 +1033,10 @@ public final class MainActivity extends Activity {
     message("Коды и пароль входа используются только для авторизации через TDLib; приложение не использует сервер разработчика.");
   }
   private void showReady() {
-    selected=message("Чат ещё не выбран");
-    button("1. Выбрать переписку",this::chooseChat);
-    button("2. Скачать зашифрованный архив",this::requestPassphrase);
+    section("АРХИВ ПЕРЕПИСКИ","Два простых шага до защищённой копии");
+    selected=message("Переписка ещё не выбрана");
+    button("1  Выбрать переписку",this::chooseChat);
+    primaryButton("2  Сохранить защищённый архив",this::requestPassphrase);
     message("Приложение загружает доступные фото, видео и документы через Telegram, в том числе отсутствующие в кэше. Пароль защищает сохранённый архив.");
     button("Завершить сеанс экспортёра",this::confirmLogout);
     button("Если загрузка не удалась: удалить её прогресс",this::confirmResetProgress);
