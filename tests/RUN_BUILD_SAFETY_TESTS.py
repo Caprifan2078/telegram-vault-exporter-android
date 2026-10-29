@@ -155,7 +155,10 @@ assert 'BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK' in a
 assert 'private void beginConnect()' in activity
 assert '.put("use_test_dc",BuildConfig.TELEGRAM_TEST_DC)' in activity
 assert 'if (BuildConfig.DEBUG || (BuildConfig.TELEGRAM_TEST_DC && !BuildConfig.ALLOW_TEST_DC_NETWORK)' in activity
-assert 'button("Подключить тестовый Telegram (отдельный аккаунт)", this::askBeforeConnect);' in activity
+assert 'button("Подключить тестовый сервер",this::askBeforeConnect);' in activity
+assert 'status.setContentDescription(text);' in activity
+assert 'primaryButton("↓   Скачать учебную переписку", this::requestSyntheticExport);' in activity
+assert 'note("ИНТЕРНЕТ ОТКЛЮЧЁН",' in activity
 assert "TEST_DC_PACKAGE = 'org.vault.exporter.sandbox.networktest'" in (ROOT/'scripts/verify_offline_apk.py').read_text()
 assert "parser.add_argument('--network-test'" in (ROOT/'scripts/verify_offline_apk.py').read_text()
 print('PASS: isolated opt-in test-DC network build; offline variants remain disconnected')
