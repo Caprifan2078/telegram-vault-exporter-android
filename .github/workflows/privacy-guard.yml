@@ -53,6 +53,7 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          set +e
           log_file="$RUNNER_TEMP/privacy-secret-audit.log"
           trap 'rm -f "$log_file"' EXIT
           docker run --rm --network none \
