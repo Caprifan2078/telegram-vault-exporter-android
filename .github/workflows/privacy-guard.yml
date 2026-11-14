@@ -55,13 +55,26 @@ jobs:
           set -uo pipefail
           set +e
           log_file="$RUNNER_TEMP/privacy-secret-audit.log"
-          trap 'rm -f "$log_file"' EXIT
+          report_file="$RUNNER_TEMP/privacy-findings.json"
+          trap 'rm -f "$log_file" "$report_file"' EXIT
           docker run --rm --network none \
-            --volume "$GITHUB_WORKSPACE:/repo:ro" --workdir /repo \
+            --volume "$GITHUB_WORKSPACE:/repo:ro" --volume "$RUNNER_TEMP:/out" --workdir /repo \
             ghcr.io/gitleaks/gitleaks@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb \
             git --log-opts='--all' --max-archive-depth=2 --max-decode-depth=2 \
-            --redact=100 --log-level=error /repo > "$log_file" 2>&1
+            --redact=100 --log-level=error --report-format=json --report-path=/out/privacy-findings.json /repo > "$log_file" 2>&1
           code=$?
+          if [[ -s "$report_file" ]]; then
+            python3 - "$report_file" <<'PY'
+          import collections, json, sys
+          try:
+              rows = json.load(open(sys.argv[1], encoding='utf-8'))
+              by_rule = collections.Counter(row.get('RuleID', 'unknown') for row in rows)
+              print('Potential matches:', len(rows))
+              print('Finding categories:', ', '.join(f'{key}: {num}' for key, num in sorted(by_rule.items())))
+          except (OSError, ValueError, TypeError):
+              print('Finding summary unavailable; no secrets printed.')
+          PY
+          fi
           if [[ "$code" -eq 0 ]]; then
             echo 'PASS: no Gitleaks secrets detected in reachable Git history.'
           elif [[ "$code" -eq 1 ]]; then
