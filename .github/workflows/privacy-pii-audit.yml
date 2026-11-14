@@ -62,4 +62,6 @@ jobs:
                   print(f'{kind} source fingerprints: {", ".join(sorted(sources[kind]))}')
           print(f'Skipped unreadable, binary or oversized files: {skipped}')
           print('NOTE: possible matches require human review; this check does not certify privacy.')
+          if sum(counts.values()):
+              raise SystemExit('Privacy check failed: review potential personal data before merging.')
           PY
