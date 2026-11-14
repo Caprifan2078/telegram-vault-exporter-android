@@ -1,4 +1,4 @@
-name: Privacy guard - secret detection
+name: Privacy guard - secret and history detection
 
 on:
   push:
@@ -10,8 +10,8 @@ permissions:
   pull-requests: read
 
 jobs:
-  scan-secrets:
-    name: Scan Git history for exposed secrets
+  scan-new-secrets:
+    name: Scan changed commits for secrets
     runs-on: ubuntu-latest
     steps:
       - name: Checkout full history
@@ -19,10 +19,54 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Detect leaked secrets (no public reports)
-        uses: gitleaks/gitleaks-action@v3
+      - name: Detect newly introduced secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: 'false'
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
           GITLEAKS_ENABLE_SUMMARY: 'false'
+
+  scan-full-history:
+    name: Complete history and encoded/archive scan (private summary only)
+    if: github.ref == 'refs/heads/security/privacy-safeguards-20261115' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout all history and tags
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check commit metadata for non-noreply emails
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=$(git log --all --format='%ae%n%ce' | grep -Eiv '(^$|@users\.noreply\.github\.com$|@github\.com$)' | wc -l | tr -d ' ') || true
+          count=${count:-0}
+          echo "History contains $(git rev-list --all --count) reachable commits."
+          echo "Non-noreply author/committer email instances: ${count}"
+          if [[ "${count}" -gt 0 ]]; then
+            echo 'NOTICE: Old commit author metadata may disclose an email; .gitignore does not remove it.'
+          fi
+      - name: Inspect all commit history and supported archives without exposing findings
+        shell: bash
+        run: |
+          set -uo pipefail
+          log_file="$RUNNER_TEMP/privacy-secret-audit.log"
+          trap 'rm -f "$log_file"' EXIT
+          docker run --rm --network none \
+            --volume "$GITHUB_WORKSPACE:/repo:ro" --workdir /repo \
+            ghcr.io/gitleaks/gitleaks@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb \
+            git --log-opts='--all' --max-archive-depth=2 --max-decode-depth=2 \
+            --redact=100 --log-level=error /repo > "$log_file" 2>&1
+          code=$?
+          if [[ "$code" -eq 0 ]]; then
+            echo 'PASS: no Gitleaks secrets detected in reachable Git history.'
+          elif [[ "$code" -eq 1 ]]; then
+            echo 'FAIL: potential secrets found in history; raw findings kept out of Actions logs.'
+            exit 1
+          else
+            echo 'ERROR: deep scan could not complete; never assume a clean result.'
+            exit "$code"
+          fi
