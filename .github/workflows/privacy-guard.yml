@@ -71,6 +71,16 @@ jobs:
               by_rule = collections.Counter(row.get('RuleID', 'unknown') for row in rows)
               print('Potential matches:', len(rows))
               print('Finding categories:', ', '.join(f'{key}: {num}' for key, num in sorted(by_rule.items())))
+              def private_path_fingerprint(path):
+                  h = 2166136261
+                  for b in path.encode('utf-8'):
+                      h = ((h ^ b) * 16777619) & 0xffffffff
+                  return f'{h:08x}'
+              source_keys = collections.Counter()
+              for row in rows:
+                  origin = row.get('File', '').split('!')[0].removeprefix('/repo/').removeprefix('./')
+                  source_keys[private_path_fingerprint(origin)] += 1
+              print('Affected source fingerprints:', ', '.join(f'{key}:{num}' for key, num in sorted(source_keys.items())))
           except (OSError, ValueError, TypeError):
               print('Finding summary unavailable; no secrets printed.')
           PY
